@@ -1,145 +1,202 @@
-"""
-Sentiment Agent — scores financial text using NLP models.
+# agents/sentiment_agent.py
 
-Supports:
-  - FinBERT (via transformers)  for domain-specific financial sentiment
-  - VADER                        for lightweight rule-based scoring
-  - Aggregation across article corpora
-"""
-
-from __future__ import annotations
-
-from typing import Any, Literal
-
-from agents.base_agent import BaseAgent, AgentError
+import requests
+from datetime import datetime
+from agents.base_agent import BaseAgent, AgentResult, AgentError
 
 
-SentimentLabel = Literal["positive", "neutral", "negative"]
+class SocialSentimentAgent(BaseAgent):
+    """
+    Agent 3: Social Sentiment Intelligence Agent
 
+    Fetches recent stock discussion from StockTwits — a social platform
+    built specifically for traders and investors.
 
-class SentimentAgent(BaseAgent):
-    """Classifies sentiment of financial news articles or arbitrary text."""
+    Uses StockTwits' own bullish/bearish tagging (set by users themselves)
+    combined with FinBERT analysis on untagged messages.
 
-    agent_name = "SentimentAgent"
+    Output: sentiment confidence score -100 to +100
+    """
 
-    _SUPPORTED_MODELS = ("finbert", "vader")
+    BASE_URL = "https://api.stocktwits.com/api/2/streams/symbol"
 
-    def __init__(self, model: str = "finbert", **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        if model not in self._SUPPORTED_MODELS:
-            raise ValueError(f"model must be one of {self._SUPPORTED_MODELS}")
-        self.model_name = model
-        self._pipeline = None  # lazy-loaded on first use
+    def __init__(self, finbert_pipeline=None):
+        super().__init__(name="SocialSentimentAgent", max_retries=2)
 
-    # ------------------------------------------------------------------
-    # Core logic
-    # ------------------------------------------------------------------
-
-    def _execute(self, texts: list[str]) -> dict[str, Any]:
-        """Score a list of text snippets.
-
-        Args:
-            texts: List of strings (e.g. article headlines/descriptions).
-
-        Returns:
-            Dict with per-text scores and an aggregate sentiment summary.
-        """
-        if not texts:
-            raise AgentError("No texts provided for sentiment analysis.")
-
-        self.logger.info(
-            "Running sentiment analysis on %d texts using %s.",
-            len(texts),
-            self.model_name,
-        )
-
-        scores = self._score_texts(texts)
-        aggregate = self._aggregate(scores)
-
-        return {
-            "model": self.model_name,
-            "scores": scores,
-            "aggregate": aggregate,
-        }
-
-    # ------------------------------------------------------------------
-    # Scoring back-ends
-    # ------------------------------------------------------------------
-
-    def _score_texts(self, texts: list[str]) -> list[dict[str, Any]]:
-        if self.model_name == "finbert":
-            return self._score_finbert(texts)
-        return self._score_vader(texts)
-
-    def _score_finbert(self, texts: list[str]) -> list[dict[str, Any]]:
-        """Score texts with FinBERT (transformers)."""
-        try:
-            from transformers import pipeline  # type: ignore
-        except ImportError as exc:
-            raise AgentError(
-                "transformers package not installed. "
-                "Run: pip install transformers torch"
-            ) from exc
-
-        if self._pipeline is None:
-            self.logger.info("Loading FinBERT pipeline (first call)…")
-            self._pipeline = pipeline(
-                "text-classification",
+        # Reuse FinBERT from NewsAgent if passed in, otherwise load fresh
+        self.finbert = finbert_pipeline
+        if self.finbert is None:
+            from transformers import pipeline
+            self.logger.info("Loading FinBERT for sentiment agent...")
+            self.finbert = pipeline(
+                task="sentiment-analysis",
                 model="ProsusAI/finbert",
                 tokenizer="ProsusAI/finbert",
-                top_k=None,
+                max_length=512,
+                truncation=True
             )
 
-        results = []
-        for text, raw in zip(texts, self._pipeline(texts, truncation=True, max_length=512)):
-            label_scores = {item["label"].lower(): item["score"] for item in raw}
-            dominant = max(label_scores, key=label_scores.__getitem__)
-            results.append({
-                "text": text[:120],
-                "label": dominant,
-                "scores": label_scores,
-            })
-        return results
+    def execute(self, symbol: str, **kwargs) -> AgentResult:
+        self.logger.info(f"Fetching social sentiment for {symbol}")
 
-    def _score_vader(self, texts: list[str]) -> list[dict[str, Any]]:
-        """Score texts with VADER (vaderSentiment)."""
-        try:
-            from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer  # type: ignore
-        except ImportError as exc:
-            raise AgentError(
-                "vaderSentiment not installed. Run: pip install vaderSentiment"
-            ) from exc
+        # --- Step 1: Fetch messages from StockTwits ---
+        messages = self._fetch_messages(symbol)
 
-        analyzer = SentimentIntensityAnalyzer()
-        results = []
-        for text in texts:
-            vs = analyzer.polarity_scores(text)
-            compound = vs["compound"]
-            if compound >= 0.05:
-                label: SentimentLabel = "positive"
-            elif compound <= -0.05:
-                label = "negative"
-            else:
-                label = "neutral"
-            results.append({"text": text[:120], "label": label, "scores": vs})
-        return results
+        if not messages:
+            self.logger.warning(f"No social messages found for {symbol}")
+            return AgentResult(
+                agent_name=self.name,
+                success=True,
+                data={"messages": [], "analyzed": []},
+                score=0.0,
+                metadata={"symbol": symbol, "messages_found": 0}
+            )
 
-    # ------------------------------------------------------------------
-    # Aggregation
-    # ------------------------------------------------------------------
+        # --- Step 2: Analyze each message ---
+        analyzed = self._analyze_messages(messages)
 
-    @staticmethod
-    def _aggregate(scores: list[dict[str, Any]]) -> dict[str, Any]:
-        from collections import Counter
+        # --- Step 3: Calculate viral/trend metrics ---
+        trend_data = self._calculate_trend_metrics(messages)
 
-        label_counts: Counter[str] = Counter(s["label"] for s in scores)
-        total = len(scores)
-        return {
-            "total": total,
-            "positive": label_counts.get("positive", 0),
-            "neutral": label_counts.get("neutral", 0),
-            "negative": label_counts.get("negative", 0),
-            "dominant": label_counts.most_common(1)[0][0] if total else "neutral",
-            "positive_pct": round(label_counts.get("positive", 0) / total * 100, 2) if total else 0,
-            "negative_pct": round(label_counts.get("negative", 0) / total * 100, 2) if total else 0,
+        # --- Step 4: Combine into final score ---
+        score = self._calculate_sentiment_score(analyzed)
+
+        self.logger.info(
+            f"{symbol} | Messages: {len(analyzed)} | "
+            f"Sentiment Score: {score} | "
+            f"Volume: {trend_data['message_count']}"
+        )
+
+        return AgentResult(
+            agent_name=self.name,
+            success=True,
+            data={
+                "analyzed"  : analyzed,
+                "trend"     : trend_data,
+            },
+            score=score,
+            metadata={"symbol": symbol, "messages_found": len(messages)}
+        )
+
+    def _fetch_messages(self, symbol: str) -> list:
+        """
+        Fetch recent messages for a symbol from StockTwits public stream.
+        Requires browser-like headers — StockTwits blocks plain bot requests.
+        """
+        url = f"{self.BASE_URL}/{symbol}.json"
+
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json",
         }
+
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.RequestException as e:
+            raise AgentError(f"StockTwits API error: {e}")
+
+        messages = data.get("messages", [])
+
+        cleaned = []
+        for msg in messages:
+            body = msg.get("body", "").strip()
+            if not body:
+                continue
+
+            entities = msg.get("entities", {})
+            sentiment_tag = entities.get("sentiment")
+            user_sentiment = sentiment_tag.get("basic") if sentiment_tag else None
+
+            cleaned.append({
+                "body"            : body,
+                "created_at"      : msg.get("created_at", ""),
+                "user_sentiment"  : user_sentiment,
+                "likes"           : msg.get("likes", {}).get("total", 0) if msg.get("likes") else 0,
+            })
+
+        return cleaned
+
+    def _analyze_messages(self, messages: list) -> list:
+        """
+        For messages where the user explicitly tagged Bullish/Bearish,
+        trust that directly. For untagged messages, run FinBERT.
+        """
+        analyzed = []
+
+        for msg in messages:
+            if msg["user_sentiment"] == "Bullish":
+                impact = 80.0
+                sentiment = "positive"
+                confidence = 1.0
+
+            elif msg["user_sentiment"] == "Bearish":
+                impact = -80.0
+                sentiment = "negative"
+                confidence = 1.0
+
+            else:
+                try:
+                    result = self.finbert(msg["body"][:512])[0]
+                    label = result["label"].lower()
+                    confidence = result["score"]
+
+                    if label == "positive":
+                        impact = round(confidence * 100, 2)
+                    elif label == "negative":
+                        impact = round(-confidence * 100, 2)
+                    else:
+                        impact = 0.0
+                    sentiment = label
+
+                except Exception:
+                    continue
+
+            analyzed.append({
+                "body"      : msg["body"][:200],
+                "sentiment" : sentiment,
+                "impact"    : impact,
+                "confidence": round(confidence, 4),
+                "likes"     : msg["likes"],
+                "source"    : "user_tag" if msg["user_sentiment"] else "finbert"
+            })
+
+        return analyzed
+
+    def _calculate_trend_metrics(self, messages: list) -> dict:
+        return {
+            "message_count" : len(messages),
+            "total_likes"   : sum(m["likes"] for m in messages),
+        }
+
+    def _calculate_sentiment_score(self, analyzed: list) -> float:
+        if not analyzed:
+            return 0.0
+
+        weighted_sum = 0.0
+        total_weight = 0.0
+
+        for msg in analyzed:
+            weight = 1.0 + min(msg["likes"] * 0.1, 5.0)
+            weighted_sum += msg["impact"] * weight
+            total_weight += weight
+
+        if total_weight == 0:
+            return 0.0
+
+        raw_score = weighted_sum / total_weight
+        return round(max(min(raw_score, 100), -100), 2)
+
+    def validate_output(self, result: AgentResult) -> bool:
+        if not result.success:
+            return False
+        if result.score is None:
+            return False
+        if not (-100 <= result.score <= 100):
+            return False
+        return True

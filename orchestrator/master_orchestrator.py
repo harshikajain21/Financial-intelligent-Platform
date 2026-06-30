@@ -6,7 +6,8 @@ from utils.logger import get_logger
 from agents.base_agent import AgentResult
 from agents.market_data_agent import MarketDataAgent
 from agents.technical_analysis_agent import TechnicalAnalysisAgent
-from agents.news_agent import NewsIntelligenceAgent              # Change 1
+from agents.news_agent import NewsIntelligenceAgent
+from agents.sentiment_agent import SocialSentimentAgent
 
 
 class AnalysisReport:
@@ -49,15 +50,29 @@ class AnalysisReport:
 
 
 class MasterOrchestrator:
+    """
+    Master Orchestrator — coordinates all agents.
+
+    Currently wired agents:
+        Stage 1 — Data Collection  : MarketDataAgent
+        Stage 2 — Analysis         : TechnicalAnalysisAgent
+                                      NewsIntelligenceAgent
+                                      SocialSentimentAgent
+    """
 
     def __init__(self):
         self.logger = get_logger("MasterOrchestrator")
 
-        self.market_agent = MarketDataAgent()
-        self.tech_agent   = TechnicalAnalysisAgent()
-        self.news_agent   = NewsIntelligenceAgent()              # Change 2
+        self.market_agent     = MarketDataAgent()
+        self.tech_agent       = TechnicalAnalysisAgent()
+        self.news_agent       = NewsIntelligenceAgent()
 
-        self.logger.info("MasterOrchestrator initialized with 3 agents")
+        # Reuse the same FinBERT model instance — avoids loading it twice
+        self.sentiment_agent  = SocialSentimentAgent(
+            finbert_pipeline=self.news_agent.finbert
+        )
+
+        self.logger.info("MasterOrchestrator initialized with 4 agents")
 
     def analyze(self, symbol: str) -> AnalysisReport:
         self.logger.info(f"Starting full analysis for {symbol}")
@@ -81,8 +96,11 @@ class MasterOrchestrator:
         tech_result = self._run_technical_analysis(symbol, price_history)
         report.add_result("TechnicalAnalysisAgent", tech_result)
 
-        news_result = self._run_news_analysis(symbol)            # Change 3
-        report.add_result("NewsIntelligenceAgent", news_result)  # Change 3
+        news_result = self._run_news_analysis(symbol)
+        report.add_result("NewsIntelligenceAgent", news_result)
+
+        sentiment_result = self._run_sentiment_analysis(symbol)
+        report.add_result("SocialSentimentAgent", sentiment_result)
 
         # ── Stage 3: Decision Fusion ──────────────────────────────
         self._make_decision(report)
@@ -112,16 +130,24 @@ class MasterOrchestrator:
         self.logger.info(f"Stage 2: Running TechnicalAnalysisAgent for {symbol}")
         return self.tech_agent.run(symbol, price_history=price_history)
 
-    def _run_news_analysis(self, symbol: str) -> AgentResult:          # Change 4
+    def _run_news_analysis(self, symbol: str) -> AgentResult:
         self.logger.info(f"Stage 2b: Running NewsIntelligenceAgent for {symbol}")
         return self.news_agent.run(symbol)
+
+    def _run_sentiment_analysis(self, symbol: str) -> AgentResult:
+        self.logger.info(f"Stage 2c: Running SocialSentimentAgent for {symbol}")
+        return self.sentiment_agent.run(symbol)
 
     # ── Decision Fusion ───────────────────────────────────────────
 
     def _make_decision(self, report: AnalysisReport):
+        """
+        Combine all agent scores into a final BUY / HOLD / SELL decision.
+        """
         weights = {
-            "TechnicalAnalysisAgent" : 0.5,   # Change 5
-            "NewsIntelligenceAgent"  : 0.5,   # Change 5
+            "TechnicalAnalysisAgent" : 0.4,
+            "NewsIntelligenceAgent"  : 0.3,
+            "SocialSentimentAgent"   : 0.3,
         }
 
         if not report.scores:
