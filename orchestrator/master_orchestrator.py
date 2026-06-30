@@ -9,6 +9,7 @@ from agents.technical_analysis_agent import TechnicalAnalysisAgent
 from agents.news_agent import NewsIntelligenceAgent
 from agents.sentiment_agent import SocialSentimentAgent
 from agents.macro_agent import MacroeconomicIntelligenceAgent
+from agents.risk_agent import PortfolioRiskAgent
 
 
 class AnalysisReport:
@@ -75,12 +76,13 @@ class MasterOrchestrator:
             finbert_pipeline=self.news_agent.finbert
         )
         self.macro_agent     = MacroeconomicIntelligenceAgent()
+        self.risk_agent = PortfolioRiskAgent()
 
         # Macro cache — shared across all symbols in this session
         self._macro_cache: Optional[AgentResult] = None
         self._macro_cache_time: Optional[datetime] = None
 
-        self.logger.info("MasterOrchestrator initialized with 5 agents")
+        self.logger.info("MasterOrchestrator initialized with 6 agents")
 
     def analyze(self, symbol: str) -> AnalysisReport:
         self.logger.info(f"Starting full analysis for {symbol}")
@@ -113,6 +115,9 @@ class MasterOrchestrator:
 
         sentiment_result = self._run_sentiment_analysis(symbol)
         report.add_result("SocialSentimentAgent", sentiment_result)
+
+        risk_result = self._run_risk_analysis(symbol, price_history)
+        report.add_result("PortfolioRiskAgent", risk_result)
 
         # ── Stage 3: Decision Fusion ──────────────────────────────
         self._make_decision(report)
@@ -172,6 +177,10 @@ class MasterOrchestrator:
         self.logger.info(f"Stage 2c: Running SocialSentimentAgent for {symbol}")
         return self.sentiment_agent.run(symbol)
 
+    def _run_risk_analysis(self, symbol: str, price_history: list) -> AgentResult:
+        self.logger.info(f"Stage 2d: Running PortfolioRiskAgent for {symbol}")
+        return self.risk_agent.run(symbol, price_history=price_history)
+    
     # ── Decision Fusion ───────────────────────────────────────────
 
     def _make_decision(self, report: AnalysisReport):
@@ -179,10 +188,11 @@ class MasterOrchestrator:
         Combine all agent scores into a final BUY / HOLD / SELL decision.
         """
         weights = {
-            "TechnicalAnalysisAgent"          : 0.35,
-            "NewsIntelligenceAgent"           : 0.20,
-            "SocialSentimentAgent"            : 0.20,
-            "MacroeconomicIntelligenceAgent"  : 0.25,
+            "TechnicalAnalysisAgent"          : 0.25,
+            "NewsIntelligenceAgent"           : 0.15,
+            "SocialSentimentAgent"            : 0.15,
+            "MacroeconomicIntelligenceAgent"  : 0.20,
+            "PortfolioRiskAgent"              : 0.25,
         }
 
         if not report.scores:
