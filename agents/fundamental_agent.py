@@ -1,174 +1,237 @@
-"""
-Fundamental Agent — analyses company fundamentals from financial statements.
+# agents/fundamental_agent.py
 
-Data sourced from:
-  - Yahoo Finance (yfinance) for income statement, balance sheet, cash flow
-  - Computed derived metrics: P/E, P/B, EV/EBITDA, DCF estimate, etc.
-"""
-
-from __future__ import annotations
-
-from typing import Any
-
-from agents.base_agent import BaseAgent, AgentError
+import yfinance as yf
+import pandas as pd
+from agents.base_agent import BaseAgent, AgentResult, AgentError
 
 
-class FundamentalAgent(BaseAgent):
-    """Retrieves and scores fundamental financial metrics for a given ticker."""
+class FundamentalAnalysisAgent(BaseAgent):
+    """
+    Agent 9: Fundamental Analysis Agent
 
-    agent_name = "FundamentalAgent"
+    Analyzes a company's financial statements to assess business health.
+    Independent of price action — purely about the company's financials.
 
-    # Sector-adjusted fair P/E benchmarks (simplified)
-    _SECTOR_PE = {
-        "Technology": 30,
-        "Healthcare": 25,
-        "Financials": 15,
-        "Energy": 12,
-        "Utilities": 18,
-        "Consumer Discretionary": 22,
-        "default": 20,
-    }
+    Score interpretation:
+        +100 = excellent financial health
+           0 = average / mixed fundamentals
+        -100 = poor financial health, red flags present
+    """
 
-    def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+    def __init__(self):
+        super().__init__(name="FundamentalAnalysisAgent", max_retries=2)
 
-    # ------------------------------------------------------------------
-    # Core logic
-    # ------------------------------------------------------------------
+    def execute(self, symbol: str, **kwargs) -> AgentResult:
+        self.logger.info(f"Running fundamental analysis for {symbol}")
 
-    def _execute(self, ticker: str) -> dict[str, Any]:
-        """Fetch and analyse fundamental data for a ticker.
+        ticker = yf.Ticker(symbol)
 
-        Args:
-            ticker: Stock ticker symbol (e.g. "AAPL").
+        # --- Step 1: Fetch financial statements ---
+        try:
+            info = ticker.info
+            balance_sheet = ticker.balance_sheet
+            income_stmt = ticker.income_stmt
+            cash_flow = ticker.cashflow
+        except Exception as e:
+            raise AgentError(f"Failed to fetch financial statements: {e}")
 
-        Returns:
-            Dict with financial statements, key ratios, and a valuation score.
+        if not info or balance_sheet.empty:
+            raise AgentError(f"No fundamental data available for {symbol}")
+
+        # --- Step 2: Calculate key ratios ---
+        ratios = self._calculate_ratios(info, balance_sheet, income_stmt, cash_flow)
+
+        # --- Step 3: Score each ratio ---
+        sub_scores = self._score_ratios(ratios)
+
+        # --- Step 4: Combine into overall score ---
+        score = self._calculate_fundamental_score(sub_scores)
+
+        self.logger.info(
+            f"{symbol} | ROE: {ratios.get('roe')}% | "
+            f"D/E: {ratios.get('debt_to_equity')} | "
+            f"Current Ratio: {ratios.get('current_ratio')} | "
+            f"Fundamental Score: {score}"
+        )
+
+        return AgentResult(
+            agent_name=self.name,
+            success=True,
+            data={
+                "ratios": ratios,
+                "sub_scores": sub_scores,
+            },
+            score=score,
+            metadata={"symbol": symbol}
+        )
+
+    def _safe_get(self, df: pd.DataFrame, row_name: str, col_index: int = 0):
+        """
+        Safely extract a value from a financial statement DataFrame.
+        Returns None if the row doesn't exist or data is missing.
         """
         try:
-            import yfinance as yf  # type: ignore
-        except ImportError as exc:
-            raise AgentError("yfinance not installed. Run: pip install yfinance") from exc
+            if row_name in df.index:
+                value = df.loc[row_name].iloc[col_index]
+                return float(value) if pd.notna(value) else None
+        except Exception:
+            pass
+        return None
 
-        self.logger.info("Fetching fundamentals for %s.", ticker)
-        stock = yf.Ticker(ticker)
+    def _calculate_ratios(self, info: dict, balance_sheet: pd.DataFrame,
+                           income_stmt: pd.DataFrame, cash_flow: pd.DataFrame) -> dict:
+        """
+        Calculate fundamental ratios from financial statements + info dict.
+        Uses .get() and safe extraction everywhere — financial data is
+        notoriously inconsistent across companies.
+        """
+        ratios = {}
 
-        try:
-            info = stock.info
-            income_stmt = stock.financials
-            balance_sheet = stock.balance_sheet
-            cash_flow = stock.cashflow
-        except Exception as exc:  # noqa: BLE001
-            raise AgentError(f"Failed to retrieve data for {ticker}: {exc}") from exc
+        # --- From the info dict (pre-calculated by Yahoo) ---
+        ratios["roe"] = self._pct(info.get("returnOnEquity"))
+        ratios["roa"] = self._pct(info.get("returnOnAssets"))
+        ratios["profit_margin"] = self._pct(info.get("profitMargins"))
+        ratios["operating_margin"] = self._pct(info.get("operatingMargins"))
+        ratios["debt_to_equity"] = self._round(info.get("debtToEquity"))
+        ratios["current_ratio"] = self._round(info.get("currentRatio"))
+        ratios["quick_ratio"] = self._round(info.get("quickRatio"))
+        ratios["pe_ratio"] = self._round(info.get("trailingPE"))
+        ratios["peg_ratio"] = self._round(info.get("pegRatio"))
+        ratios["revenue_growth"] = self._pct(info.get("revenueGrowth"))
+        ratios["earnings_growth"] = self._pct(info.get("earningsGrowth"))
+        ratios["free_cashflow"] = info.get("freeCashflow")
 
-        ratios = self._compute_ratios(info)
-        dcf = self._simple_dcf(info, cash_flow)
-        score = self._valuation_score(ratios, info.get("sector", "default"))
+        # --- Manual calculation from raw statements (backup/cross-check) ---
+        total_revenue = self._safe_get(income_stmt, "Total Revenue")
+        net_income = self._safe_get(income_stmt, "Net Income")
+        total_assets = self._safe_get(balance_sheet, "Total Assets")
+        total_debt = self._safe_get(balance_sheet, "Total Debt")
+        stockholders_equity = self._safe_get(balance_sheet, "Stockholders Equity")
 
-        return {
-            "ticker": ticker,
-            "company_name": info.get("longName"),
-            "sector": info.get("sector"),
-            "market_cap": info.get("marketCap"),
-            "ratios": ratios,
-            "dcf_estimate": dcf,
-            "valuation_score": score,
-            "income_statement": income_stmt.to_dict() if income_stmt is not None else {},
-            "balance_sheet": balance_sheet.to_dict() if balance_sheet is not None else {},
-            "cash_flow": cash_flow.to_dict() if cash_flow is not None else {},
-        }
+        ratios["net_margin_calculated"] = (
+            self._round((net_income / total_revenue) * 100)
+            if net_income and total_revenue else None
+        )
 
-    # ------------------------------------------------------------------
-    # Ratio computation
-    # ------------------------------------------------------------------
+        return ratios
 
-    @staticmethod
-    def _compute_ratios(info: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "pe_ratio": info.get("trailingPE"),
-            "forward_pe": info.get("forwardPE"),
-            "pb_ratio": info.get("priceToBook"),
-            "ps_ratio": info.get("priceToSalesTrailing12Months"),
-            "ev_ebitda": info.get("enterpriseToEbitda"),
-            "debt_to_equity": info.get("debtToEquity"),
-            "current_ratio": info.get("currentRatio"),
-            "roe": info.get("returnOnEquity"),
-            "roa": info.get("returnOnAssets"),
-            "profit_margin": info.get("profitMargins"),
-            "operating_margin": info.get("operatingMargins"),
-            "revenue_growth": info.get("revenueGrowth"),
-            "earnings_growth": info.get("earningsGrowth"),
-            "dividend_yield": info.get("dividendYield"),
-            "peg_ratio": info.get("pegRatio"),
-            "beta": info.get("beta"),
-        }
-
-    @staticmethod
-    def _simple_dcf(info: dict[str, Any], cash_flow: Any) -> dict[str, Any] | None:
-        """Simplified two-stage DCF using free cash flow."""
-        try:
-            import pandas as pd  # noqa: F401
-
-            fcf_series = cash_flow.loc["Free Cash Flow"] if "Free Cash Flow" in cash_flow.index else None
-            if fcf_series is None or fcf_series.empty:
-                return None
-
-            latest_fcf = float(fcf_series.iloc[0])
-            shares = info.get("sharesOutstanding", 1)
-            wacc = 0.10
-            g_high = 0.15
-            g_terminal = 0.03
-            years_high = 5
-
-            pv = 0.0
-            for yr in range(1, years_high + 1):
-                pv += latest_fcf * (1 + g_high) ** yr / (1 + wacc) ** yr
-
-            terminal_value = (
-                latest_fcf * (1 + g_high) ** years_high * (1 + g_terminal)
-                / (wacc - g_terminal)
-            )
-            pv += terminal_value / (1 + wacc) ** years_high
-
-            intrinsic_per_share = pv / shares if shares else None
-            return {
-                "intrinsic_value_per_share": round(intrinsic_per_share, 2) if intrinsic_per_share else None,
-                "assumptions": {
-                    "wacc": wacc,
-                    "growth_rate_high": g_high,
-                    "terminal_growth": g_terminal,
-                },
-            }
-        except Exception:  # noqa: BLE001
+    def _pct(self, value):
+        """Convert a decimal ratio to a percentage, rounded."""
+        if value is None:
             return None
+        return round(float(value) * 100, 2)
 
-    def _valuation_score(self, ratios: dict[str, Any], sector: str) -> dict[str, Any]:
-        """Score -10 (very overvalued) to +10 (very undervalued)."""
-        fair_pe = self._SECTOR_PE.get(sector, self._SECTOR_PE["default"])
-        score = 0
-        reasons = []
+    def _round(self, value, decimals=2):
+        if value is None:
+            return None
+        return round(float(value), decimals)
 
-        pe = ratios.get("pe_ratio")
-        if pe and pe > 0:
-            if pe < fair_pe * 0.8:
-                score += 2
-                reasons.append("P/E below sector fair value")
-            elif pe > fair_pe * 1.5:
-                score -= 2
-                reasons.append("P/E significantly above sector fair value")
+    def _score_ratios(self, ratios: dict) -> dict:
+        """
+        Score each fundamental ratio individually.
+        Thresholds based on general value-investing heuristics.
+        """
+        scores = {}
 
+        # --- ROE (Return on Equity) ---
+        # >20% excellent, 10-20% good, 0-10% mediocre, <0% bad
         roe = ratios.get("roe")
-        if roe and roe > 0.15:
-            score += 1
-            reasons.append("Strong ROE (>15%)")
+        if roe is not None:
+            if roe >= 20:
+                scores["roe"] = 30
+            elif roe >= 10:
+                scores["roe"] = 15
+            elif roe >= 0:
+                scores["roe"] = -5
+            else:
+                scores["roe"] = -30
+        else:
+            scores["roe"] = 0
 
-        debt_eq = ratios.get("debt_to_equity")
-        if debt_eq is not None:
-            if debt_eq < 0.5:
-                score += 1
-                reasons.append("Low leverage")
-            elif debt_eq > 2.0:
-                score -= 1
-                reasons.append("High leverage risk")
+        # --- Debt to Equity ---
+        # Lower is generally safer. <50 = conservative, >150 = highly leveraged
+        de = ratios.get("debt_to_equity")
+        if de is not None:
+            if de < 50:
+                scores["debt_to_equity"] = 25
+            elif de < 100:
+                scores["debt_to_equity"] = 10
+            elif de < 200:
+                scores["debt_to_equity"] = -15
+            else:
+                scores["debt_to_equity"] = -35
+        else:
+            scores["debt_to_equity"] = 0
 
-        return {"score": score, "interpretation": reasons}
+        # --- Current Ratio ---
+        # >1.5 = healthy liquidity, <1.0 = potential liquidity issues
+        cr = ratios.get("current_ratio")
+        if cr is not None:
+            if cr >= 1.5:
+                scores["current_ratio"] = 20
+            elif cr >= 1.0:
+                scores["current_ratio"] = 5
+            else:
+                scores["current_ratio"] = -25
+        else:
+            scores["current_ratio"] = 0
+
+        # --- Profit Margin ---
+        pm = ratios.get("profit_margin")
+        if pm is not None:
+            if pm >= 20:
+                scores["profit_margin"] = 25
+            elif pm >= 10:
+                scores["profit_margin"] = 10
+            elif pm >= 0:
+                scores["profit_margin"] = -5
+            else:
+                scores["profit_margin"] = -25
+        else:
+            scores["profit_margin"] = 0
+
+        # --- PEG Ratio ---
+        # ~1.0 = fairly valued relative to growth, <1 = undervalued, >2 = overvalued
+        peg = ratios.get("peg_ratio")
+        if peg is not None and peg > 0:
+            if peg < 1:
+                scores["peg_ratio"] = 20
+            elif peg < 2:
+                scores["peg_ratio"] = 5
+            else:
+                scores["peg_ratio"] = -15
+        else:
+            scores["peg_ratio"] = 0
+
+        # --- Revenue Growth ---
+        rg = ratios.get("revenue_growth")
+        if rg is not None:
+            if rg >= 15:
+                scores["revenue_growth"] = 20
+            elif rg >= 5:
+                scores["revenue_growth"] = 10
+            elif rg >= 0:
+                scores["revenue_growth"] = 0
+            else:
+                scores["revenue_growth"] = -20
+        else:
+            scores["revenue_growth"] = 0
+
+        return scores
+
+    def _calculate_fundamental_score(self, sub_scores: dict) -> float:
+        """
+        Sum all sub-scores (they're already weighted via their point ranges above)
+        and clamp to -100 to +100.
+        """
+        total = sum(v for v in sub_scores.values() if v is not None)
+        return round(max(min(total, 100), -100), 2)
+
+    def validate_output(self, result: AgentResult) -> bool:
+        if not result.success:
+            return False
+        if result.score is None:
+            return False
+        if not (-100 <= result.score <= 100):
+            return False
+        return True

@@ -10,6 +10,7 @@ from agents.news_agent import NewsIntelligenceAgent
 from agents.sentiment_agent import SocialSentimentAgent
 from agents.macro_agent import MacroeconomicIntelligenceAgent
 from agents.risk_agent import PortfolioRiskAgent
+from agents.fundamental_agent import FundamentalAnalysisAgent
 
 
 class AnalysisReport:
@@ -77,12 +78,13 @@ class MasterOrchestrator:
         )
         self.macro_agent     = MacroeconomicIntelligenceAgent()
         self.risk_agent = PortfolioRiskAgent()
+        self.fundamental_agent = FundamentalAnalysisAgent()
 
         # Macro cache — shared across all symbols in this session
         self._macro_cache: Optional[AgentResult] = None
         self._macro_cache_time: Optional[datetime] = None
 
-        self.logger.info("MasterOrchestrator initialized with 6 agents")
+        self.logger.info("MasterOrchestrator initialized with 7 agents")
 
     def analyze(self, symbol: str) -> AnalysisReport:
         self.logger.info(f"Starting full analysis for {symbol}")
@@ -118,6 +120,9 @@ class MasterOrchestrator:
 
         risk_result = self._run_risk_analysis(symbol, price_history)
         report.add_result("PortfolioRiskAgent", risk_result)
+
+        fundamental_result = self._run_fundamental_analysis(symbol)
+        report.add_result("FundamentalAnalysisAgent", fundamental_result)
 
         # ── Stage 3: Decision Fusion ──────────────────────────────
         self._make_decision(report)
@@ -180,6 +185,10 @@ class MasterOrchestrator:
     def _run_risk_analysis(self, symbol: str, price_history: list) -> AgentResult:
         self.logger.info(f"Stage 2d: Running PortfolioRiskAgent for {symbol}")
         return self.risk_agent.run(symbol, price_history=price_history)
+
+    def _run_fundamental_analysis(self, symbol: str) -> AgentResult:
+        self.logger.info(f"Stage 2e: Running FundamentalAnalysisAgent for {symbol}")
+        return self.fundamental_agent.run(symbol)
     
     # ── Decision Fusion ───────────────────────────────────────────
 
@@ -188,11 +197,12 @@ class MasterOrchestrator:
         Combine all agent scores into a final BUY / HOLD / SELL decision.
         """
         weights = {
-            "TechnicalAnalysisAgent"          : 0.25,
-            "NewsIntelligenceAgent"           : 0.15,
-            "SocialSentimentAgent"            : 0.15,
+            "TechnicalAnalysisAgent"          : 0.20,
+            "NewsIntelligenceAgent"           : 0.10,
+            "SocialSentimentAgent"            : 0.10,
             "MacroeconomicIntelligenceAgent"  : 0.20,
-            "PortfolioRiskAgent"              : 0.25,
+            "PortfolioRiskAgent"              : 0.20,
+            "FundamentalAnalysisAgent"        : 0.20,
         }
 
         if not report.scores:
