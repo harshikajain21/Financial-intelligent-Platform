@@ -75,7 +75,7 @@ class BaseAgent(ABC):
         self.logger.info(f"Agent initialized: {self.name}")
 
     @abstractmethod
-    def execute(self, symbol: str, **kwargs) -> AgentResult:
+    def execute(self, symbol: str = "GLOBAL", **kwargs) -> AgentResult:
         """
         Core logic of the agent. Every agent implements this differently.
         symbol: stock ticker e.g. 'AAPL'
@@ -90,7 +90,7 @@ class BaseAgent(ABC):
         """
         pass
 
-    def run(self, symbol: str, **kwargs) -> AgentResult:
+    def run(self, symbol: str = "GLOBAL", **kwargs) -> AgentResult:
         """
         Public method called by the Orchestrator.
         Wraps execute() with retry logic and error handling.

@@ -8,6 +8,7 @@ from agents.market_data_agent import MarketDataAgent
 from agents.technical_analysis_agent import TechnicalAnalysisAgent
 from agents.news_agent import NewsIntelligenceAgent
 from agents.sentiment_agent import SocialSentimentAgent
+from agents.macro_agent import MacroeconomicIntelligenceAgent
 
 
 class AnalysisReport:
@@ -58,27 +59,38 @@ class MasterOrchestrator:
         Stage 2 — Analysis         : TechnicalAnalysisAgent
                                       NewsIntelligenceAgent
                                       SocialSentimentAgent
+        Stage 0 — Macro (cached)   : MacroeconomicIntelligenceAgent
     """
+
+    # How long to cache macro data before refetching (in seconds)
+    MACRO_CACHE_SECONDS = 3600   # 1 hour — macro data doesn't change fast
 
     def __init__(self):
         self.logger = get_logger("MasterOrchestrator")
 
-        self.market_agent     = MarketDataAgent()
-        self.tech_agent       = TechnicalAnalysisAgent()
-        self.news_agent       = NewsIntelligenceAgent()
-
-        # Reuse the same FinBERT model instance — avoids loading it twice
-        self.sentiment_agent  = SocialSentimentAgent(
+        self.market_agent    = MarketDataAgent()
+        self.tech_agent      = TechnicalAnalysisAgent()
+        self.news_agent      = NewsIntelligenceAgent()
+        self.sentiment_agent = SocialSentimentAgent(
             finbert_pipeline=self.news_agent.finbert
         )
+        self.macro_agent     = MacroeconomicIntelligenceAgent()
 
-        self.logger.info("MasterOrchestrator initialized with 4 agents")
+        # Macro cache — shared across all symbols in this session
+        self._macro_cache: Optional[AgentResult] = None
+        self._macro_cache_time: Optional[datetime] = None
+
+        self.logger.info("MasterOrchestrator initialized with 5 agents")
 
     def analyze(self, symbol: str) -> AnalysisReport:
         self.logger.info(f"Starting full analysis for {symbol}")
         start_time = datetime.utcnow()
 
         report = AnalysisReport(symbol)
+
+        # ── Stage 0: Macro (cached, not stock-specific) ───────────
+        macro_result = self._get_macro_data()
+        report.add_result("MacroeconomicIntelligenceAgent", macro_result)
 
         # ── Stage 1: Data Collection ──────────────────────────────
         market_result = self._run_market_data(symbol)
@@ -122,6 +134,28 @@ class MasterOrchestrator:
 
     # ── Private runner methods ────────────────────────────────────
 
+    def _get_macro_data(self) -> AgentResult:
+        """
+        Returns cached macro data if still fresh, otherwise fetches new.
+        Macro conditions don't change minute to minute, so we avoid
+        hammering the FRED API unnecessarily.
+        """
+        now = datetime.utcnow()
+
+        if (self._macro_cache is not None and self._macro_cache_time is not None):
+            age_seconds = (now - self._macro_cache_time).total_seconds()
+            if age_seconds < self.MACRO_CACHE_SECONDS:
+                self.logger.info(f"Using cached macro data (age: {int(age_seconds)}s)")
+                return self._macro_cache
+
+        self.logger.info("Stage 0: Running MacroeconomicIntelligenceAgent (fresh fetch)")
+        result = self.macro_agent.run()
+
+        self._macro_cache = result
+        self._macro_cache_time = now
+
+        return result
+
     def _run_market_data(self, symbol: str) -> AgentResult:
         self.logger.info(f"Stage 1: Running MarketDataAgent for {symbol}")
         return self.market_agent.run(symbol)
@@ -145,9 +179,10 @@ class MasterOrchestrator:
         Combine all agent scores into a final BUY / HOLD / SELL decision.
         """
         weights = {
-            "TechnicalAnalysisAgent" : 0.4,
-            "NewsIntelligenceAgent"  : 0.3,
-            "SocialSentimentAgent"   : 0.3,
+            "TechnicalAnalysisAgent"          : 0.35,
+            "NewsIntelligenceAgent"           : 0.20,
+            "SocialSentimentAgent"            : 0.20,
+            "MacroeconomicIntelligenceAgent"  : 0.25,
         }
 
         if not report.scores:

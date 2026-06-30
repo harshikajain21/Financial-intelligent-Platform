@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     Reads from .env file automatically.
     lru_cache (below) ensures this is only loaded once.
     """
+    # --- Macro ---
+    FRED_API_KEY: str = ""
 
     # --- App ---
     APP_NAME: str = "Financial Intelligence Platform"
