@@ -1,7 +1,9 @@
-# database/connection.py
+# fix_connection.py
+
+content = """# database/connection.py
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from database.models import Base
 from utils.logger import get_logger
 
@@ -29,3 +31,8 @@ def get_db():
         yield db
     finally:
         db.close()
+"""
+
+with open("database/connection.py", "w", encoding="utf-8") as f:
+    f.write(content)
+    print("database/connection.py fixed")

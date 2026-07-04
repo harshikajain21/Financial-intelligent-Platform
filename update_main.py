@@ -1,4 +1,6 @@
-# api/main.py
+# update_main.py
+
+content = '''# api/main.py
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,3 +63,8 @@ async def root():
         "docs"    : "/docs",
         "health"  : "/api/v1/health"
     }
+'''
+
+with open("api/main.py", "w") as f:
+    f.write(content)
+    print("api/main.py updated")

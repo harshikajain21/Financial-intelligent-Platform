@@ -1,4 +1,6 @@
-# api/routes/analysis.py
+# update_analysis_route.py
+
+content = '''# api/routes/analysis.py
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
@@ -95,3 +97,8 @@ async def analyze_symbol(symbol: str, db: Session = Depends(get_db)):
         duration_ms    = report.duration_ms,
         recommendation = recommendation
     )
+'''
+
+with open("api/routes/analysis.py", "w") as f:
+    f.write(content)
+    print("api/routes/analysis.py updated")
