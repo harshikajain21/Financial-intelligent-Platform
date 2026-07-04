@@ -12,6 +12,7 @@ from agents.macro_agent import MacroeconomicIntelligenceAgent
 from agents.risk_agent import PortfolioRiskAgent
 from agents.fundamental_agent import FundamentalAnalysisAgent
 from agents.regime_agent import RegimeDetectionAgent
+from agents.anomaly_agent import AnomalyDetectionAgent
 
 
 class AnalysisReport:
@@ -81,13 +82,14 @@ class MasterOrchestrator:
         self.risk_agent = PortfolioRiskAgent()
         self.fundamental_agent = FundamentalAnalysisAgent()
         self.regime_agent = RegimeDetectionAgent()
+        self.anomaly_agent = AnomalyDetectionAgent()
 
 
         # Macro cache — shared across all symbols in this session
         self._macro_cache: Optional[AgentResult] = None
         self._macro_cache_time: Optional[datetime] = None
 
-        self.logger.info("MasterOrchestrator initialized with 8 agents")
+        self.logger.info("MasterOrchestrator initialized with 9 agents")
 
     def analyze(self, symbol: str) -> AnalysisReport:
         self.logger.info(f"Starting full analysis for {symbol}")
@@ -129,6 +131,10 @@ class MasterOrchestrator:
 
         regime_result = self._run_regime_detection(symbol,price_history)
         report.add_result("RegimeDetectionAgent", regime_result)
+
+        anomaly_result = self._run_anomaly_detection(symbol, price_history)
+        report.add_result("AnomalyDetectionAgent", anomaly_result)
+
 
 
         # ── Stage 3: Decision Fusion ──────────────────────────────
@@ -196,12 +202,15 @@ class MasterOrchestrator:
     def _run_fundamental_analysis(self, symbol: str) -> AgentResult:
         self.logger.info(f"Stage 2e: Running FundamentalAnalysisAgent for {symbol}")
         return self.fundamental_agent.run(symbol)
-
     
     def _run_regime_detection(self, symbol: str, price_history: list) -> AgentResult:
         self.logger.info(f"Stage 2f: Running RegimeDetectionAgent for {symbol}")
         return self.regime_agent.run(symbol, price_history=price_history)
     
+    def _run_anomaly_detection(self, symbol: str, price_history: list) -> AgentResult:
+        self.logger.info(f"Stage 2g: Running AnomalyDetectionAgent for {symbol}")
+        return self.anomaly_agent.run(symbol, price_history=price_history)
+
     # ── Decision Fusion ───────────────────────────────────────────
 
     def _make_decision(self, report: AnalysisReport):
@@ -214,10 +223,10 @@ class MasterOrchestrator:
     "SocialSentimentAgent"            : 0.10,
     "MacroeconomicIntelligenceAgent"  : 0.15,
     "PortfolioRiskAgent"              : 0.15,
-    "FundamentalAnalysisAgent"        : 0.15,
-    "RegimeDetectionAgent"            : 0.15,
+    "FundamentalAnalysisAgent"        : 0.10,
+    "RegimeDetectionAgent"            : 0.10,
+    "AnomalyDetectionAgent"           : 0.10,
 }
-
         if not report.scores:
             report.final_decision = "HOLD"
             report.confidence = 0
