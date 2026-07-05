@@ -1,3 +1,6 @@
+# update_main_security.py
+
+content = """
 # api/main.py
 
 from fastapi import FastAPI, Request, status
@@ -96,3 +99,8 @@ async def root():
         "docs"    : "/docs",
         "health"  : "/api/v1/health"
     }
+"""
+
+with open("api/main.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("api/main.py updated with security")

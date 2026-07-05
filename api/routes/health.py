@@ -1,6 +1,7 @@
 # api/routes/health.py
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
+from api.limiter import limiter
 from api.models import HealthResponse
 from datetime import datetime
 from config.settings import settings
@@ -9,7 +10,8 @@ router = APIRouter()
 
 
 @router.get("/health", response_model=HealthResponse, summary="API health check")
-async def health_check():
+@limiter.limit("60/minute")
+async def health_check(request: Request):
     return HealthResponse(
         status    = "healthy",
         version   = settings.VERSION,
@@ -19,7 +21,8 @@ async def health_check():
 
 
 @router.get("/agents", summary="List all agents and their status")
-async def list_agents():
+@limiter.limit("30/minute")
+async def list_agents(request: Request):
     agents = [
         {"name": "MarketDataAgent",               "stage": "1",  "type": "data"},
         {"name": "TechnicalAnalysisAgent",         "stage": "2",  "type": "analysis"},

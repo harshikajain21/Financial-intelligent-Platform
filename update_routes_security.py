@@ -1,3 +1,6 @@
+# update_routes_security.py
+
+analysis = """
 # api/routes/analysis.py
 
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -146,3 +149,155 @@ async def analyze_symbol(
         recommendation = recommendation,
         explanations   = explanations
     )
+"""
+
+search = """
+# api/routes/search.py
+
+from fastapi import APIRouter, Request
+from api.limiter import limiter
+from api.sanitizer import sanitize_query
+from data.stock_universe import search_stocks, resolve_symbol
+
+router = APIRouter()
+
+
+@router.get("/search", summary="Search stocks by name or ticker")
+@limiter.limit("30/minute")
+async def search(request: Request, query: str, limit: int = 8):
+    query = sanitize_query(query)
+    if not query or len(query) < 2:
+        return {"results": []}
+    if limit > 20:
+        limit = 20
+    results = search_stocks(query, limit)
+    return {"results": results}
+
+
+@router.get("/resolve", summary="Resolve company name to ticker symbol")
+@limiter.limit("30/minute")
+async def resolve(request: Request, query: str, exchange: str = "NSE"):
+    query    = sanitize_query(query)
+    symbol   = resolve_symbol(query, exchange)
+    return {"symbol": symbol, "exchange": exchange}
+"""
+
+prices = """
+# api/routes/prices.py
+
+from fastapi import APIRouter, HTTPException, Request
+from api.limiter import limiter
+from api.sanitizer import sanitize_symbol
+import yfinance as yf
+from utils.logger import get_logger
+
+router = APIRouter()
+logger = get_logger("PricesRouter")
+
+ALLOWED_PERIODS = {"1mo", "3mo", "6mo", "1y", "2y"}
+
+
+@router.get("/prices/{symbol}", summary="Get price history for a stock symbol")
+@limiter.limit("20/minute")
+async def get_prices(request: Request, symbol: str, period: str = "6mo"):
+    symbol = sanitize_symbol(symbol)
+
+    if period not in ALLOWED_PERIODS:
+        raise HTTPException(status_code=400, detail=f"Invalid period. Allowed: {ALLOWED_PERIODS}")
+
+    try:
+        logger.info(f"Fetching price history for {symbol}")
+        ticker = yf.Ticker(symbol)
+        hist   = ticker.history(period=period)
+
+        if hist.empty:
+            raise HTTPException(status_code=404, detail=f"No price data found for {symbol}")
+
+        hist = hist.reset_index()
+        data = []
+        for _, row in hist.iterrows():
+            data.append({
+                "date"  : str(row["Date"])[:10],
+                "close" : round(float(row["Close"]), 2),
+                "open"  : round(float(row["Open"]), 2),
+                "high"  : round(float(row["High"]), 2),
+                "low"   : round(float(row["Low"]), 2),
+                "volume": int(row["Volume"]),
+            })
+
+        closes      = [d["close"] for d in data]
+        start_price = closes[0] if closes else 0
+        end_price   = closes[-1] if closes else 0
+        change_pct  = round(((end_price - start_price) / start_price) * 100, 2) if start_price else 0
+
+        return {
+            "symbol"      : symbol,
+            "period"      : period,
+            "data"        : data,
+            "current"     : end_price,
+            "change_pct"  : change_pct,
+            "period_high" : round(max(closes), 2) if closes else 0,
+            "period_low"  : round(min(closes), 2) if closes else 0,
+            "bars"        : len(data)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Price fetch failed for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch price data. Please try again.")
+"""
+
+health = """
+# api/routes/health.py
+
+from fastapi import APIRouter, Request
+from api.limiter import limiter
+from api.models import HealthResponse
+from datetime import datetime
+from config.settings import settings
+
+router = APIRouter()
+
+
+@router.get("/health", response_model=HealthResponse, summary="API health check")
+@limiter.limit("60/minute")
+async def health_check(request: Request):
+    return HealthResponse(
+        status    = "healthy",
+        version   = settings.VERSION,
+        agents    = 9,
+        timestamp = datetime.utcnow().isoformat()
+    )
+
+
+@router.get("/agents", summary="List all agents and their status")
+@limiter.limit("30/minute")
+async def list_agents(request: Request):
+    agents = [
+        {"name": "MarketDataAgent",               "stage": "1",  "type": "data"},
+        {"name": "TechnicalAnalysisAgent",         "stage": "2",  "type": "analysis"},
+        {"name": "NewsIntelligenceAgent",          "stage": "2b", "type": "analysis"},
+        {"name": "SocialSentimentAgent",           "stage": "2c", "type": "analysis"},
+        {"name": "PortfolioRiskAgent",             "stage": "2d", "type": "analysis"},
+        {"name": "FundamentalAnalysisAgent",       "stage": "2e", "type": "analysis"},
+        {"name": "RegimeDetectionAgent",           "stage": "2f", "type": "analysis"},
+        {"name": "AnomalyDetectionAgent",          "stage": "2g", "type": "analysis"},
+        {"name": "MacroeconomicIntelligenceAgent", "stage": "0",  "type": "macro"},
+    ]
+    return {"total_agents": len(agents), "agents": agents}
+"""
+
+files = {
+    "api/routes/analysis.py" : analysis,
+    "api/routes/search.py"   : search,
+    "api/routes/prices.py"   : prices,
+    "api/routes/health.py"   : health,
+}
+
+for path, content in files.items():
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content.strip())
+    print(f"Written: {path}")
+
+print("\nAll routes updated with security!")
