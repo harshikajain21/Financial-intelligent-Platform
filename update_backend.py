@@ -1,4 +1,102 @@
-# api/routes/analysis.py
+# update_backend.py
+
+import os
+
+# 1. Search route
+search_route = """# api/routes/search.py
+
+from fastapi import APIRouter
+from data.stock_universe import search_stocks, resolve_symbol
+
+router = APIRouter()
+
+
+@router.get("/search", summary="Search stocks by name or ticker")
+async def search(query: str, limit: int = 8):
+    if not query or len(query) < 2:
+        return {"results": []}
+    results = search_stocks(query, limit)
+    return {"results": results}
+
+
+@router.get("/resolve", summary="Resolve company name to ticker symbol")
+async def resolve(query: str, exchange: str = "NSE"):
+    symbol = resolve_symbol(query, exchange)
+    return {"symbol": symbol, "exchange": exchange}
+"""
+
+with open("api/routes/search.py", "w", encoding="utf-8") as f:
+    f.write(search_route.strip())
+    print("api/routes/search.py written")
+
+# 2. Updated main.py with search router
+main_content = """# api/main.py
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
+from utils.logger import get_logger
+from config.settings import settings
+
+logger = get_logger("FastAPI")
+orchestrator = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global orchestrator
+    logger.info("Starting up Financial Intelligence Platform API...")
+    from database.connection import init_db
+    init_db()
+    from orchestrator.master_orchestrator import MasterOrchestrator
+    orchestrator = MasterOrchestrator()
+    logger.info("All agents initialized. API ready.")
+    yield
+    logger.info("Shutting down API...")
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.VERSION,
+    description="Multi-agent AI system for real-time stock market intelligence",
+    lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+from api.routes.analysis import router as analysis_router
+from api.routes.health import router as health_router
+from api.routes.history import router as history_router
+from api.routes.search import router as search_router
+
+app.include_router(analysis_router, prefix="/api/v1", tags=["Analysis"])
+app.include_router(health_router,   prefix="/api/v1", tags=["Health"])
+app.include_router(history_router,  prefix="/api/v1", tags=["History"])
+app.include_router(search_router,   prefix="/api/v1", tags=["Search"])
+
+
+@app.get("/", tags=["Root"])
+async def root():
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.VERSION,
+        "docs": "/docs",
+        "health": "/api/v1/health"
+    }
+"""
+
+with open("api/main.py", "w", encoding="utf-8") as f:
+    f.write(main_content.strip())
+    print("api/main.py updated")
+
+# 3. Updated analysis route with plain English explanations
+analysis_content = """# api/routes/analysis.py
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
@@ -186,3 +284,10 @@ async def analyze_symbol(
         recommendation=recommendation,
         explanations=explanations
     )
+"""
+
+with open("api/routes/analysis.py", "w", encoding="utf-8") as f:
+    f.write(analysis_content.strip())
+    print("api/routes/analysis.py updated")
+
+print("\nAll backend files updated successfully!")

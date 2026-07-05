@@ -7,7 +7,6 @@ from utils.logger import get_logger
 from config.settings import settings
 
 logger = get_logger("FastAPI")
-
 orchestrator = None
 
 
@@ -15,49 +14,48 @@ orchestrator = None
 async def lifespan(app: FastAPI):
     global orchestrator
     logger.info("Starting up Financial Intelligence Platform API...")
-
-    # Initialize database
     from database.connection import init_db
     init_db()
-
-    # Initialize orchestrator
     from orchestrator.master_orchestrator import MasterOrchestrator
     orchestrator = MasterOrchestrator()
-
     logger.info("All agents initialized. API ready.")
     yield
     logger.info("Shutting down API...")
 
 
 app = FastAPI(
-    title       = settings.APP_NAME,
-    version     = settings.VERSION,
-    description = "Multi-agent AI system for real-time stock market intelligence",
-    lifespan    = lifespan
+    title=settings.APP_NAME,
+    version=settings.VERSION,
+    description="Multi-agent AI system for real-time stock market intelligence",
+    lifespan=lifespan
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = ["*"],
-    allow_credentials = True,
-    allow_methods     = ["*"],
-    allow_headers     = ["*"],
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 from api.routes.analysis import router as analysis_router
 from api.routes.health import router as health_router
 from api.routes.history import router as history_router
+from api.routes.search import router as search_router
+from api.routes.prices import router as prices_router
 
 app.include_router(analysis_router, prefix="/api/v1", tags=["Analysis"])
 app.include_router(health_router,   prefix="/api/v1", tags=["Health"])
 app.include_router(history_router,  prefix="/api/v1", tags=["History"])
+app.include_router(search_router,   prefix="/api/v1", tags=["Search"])
+app.include_router(prices_router,   prefix="/api/v1", tags=["Prices"])
 
 
 @app.get("/", tags=["Root"])
 async def root():
     return {
-        "name"    : settings.APP_NAME,
-        "version" : settings.VERSION,
-        "docs"    : "/docs",
-        "health"  : "/api/v1/health"
+        "name": settings.APP_NAME,
+        "version": settings.VERSION,
+        "docs": "/docs",
+        "health": "/api/v1/health"
     }

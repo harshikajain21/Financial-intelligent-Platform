@@ -5,8 +5,11 @@ const api = axios.create({
   timeout: 60000,
 });
 
-export const analyzeStock = (symbol) => api.post('/analyze/' + symbol);
-export const getHistory = (symbol, limit = 10) => api.get('/history/' + symbol + '?limit=' + limit);
+export const searchStocks = (query) => api.get('/search?query=' + query);
+export const analyzeStock = (symbol, exchange = 'NSE') => 
+  api.post('/analyze/' + symbol + '?exchange=' + exchange);
+export const getHistory = (symbol, limit = 10) => 
+  api.get('/history/' + symbol + '?limit=' + limit);
 export const getDashboard = () => api.get('/dashboard');
 export const addToWatchlist = (symbol) => api.post('/watchlist/' + symbol);
 export const getWatchlist = () => api.get('/watchlist');
