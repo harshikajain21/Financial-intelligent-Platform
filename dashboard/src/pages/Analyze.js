@@ -17,7 +17,7 @@ function getColor(score) {
 }
 
 function ScoreBar({ name, score }) {
-  const pct = Math.min(Math.abs(score), 100);
+  const pct   = Math.min(Math.abs(score), 100);
   const color = getColor(score);
   const label = name.replace('Agent','').replace('Intelligence','').replace('Analysis','').trim();
   return (
@@ -34,11 +34,12 @@ function ScoreBar({ name, score }) {
 }
 
 function Analyze() {
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [saved, setSaved] = useState(false);
-  const [analyzedSymbol, setAnalyzedSymbol] = useState(null);
+  const [result,          setResult]          = useState(null);
+  const [loading,         setLoading]         = useState(false);
+  const [error,           setError]           = useState(null);
+  const [saved,           setSaved]           = useState(false);
+  const [analyzedSymbol,  setAnalyzedSymbol]  = useState(null);
+  const [forecasts,       setForecasts]       = useState(null);
 
   const handleSearch = async (symbol, exchange) => {
     setLoading(true);
@@ -46,10 +47,17 @@ function Analyze() {
     setResult(null);
     setSaved(false);
     setAnalyzedSymbol(null);
+    setForecasts(null);
     try {
       const res = await analyzeStock(symbol, exchange);
       setResult(res.data);
       setAnalyzedSymbol(res.data.symbol);
+
+      // Extract forecast data if available
+      const forecastScore = res.data.scores?.ForecastingAgent;
+      if (forecastScore !== undefined && res.data.forecasts) {
+        setForecasts(res.data.forecasts);
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Analysis failed. Check the symbol and try again.');
     } finally {
@@ -76,7 +84,7 @@ function Analyze() {
         <div className="loading">
           <div>
             <div style={{ fontSize: 16, marginBottom: 8 }}>Running AI analysis...</div>
-            <div style={{ fontSize: 13, color: '#484f58' }}>9 agents working — usually takes 15-30 seconds</div>
+            <div style={{ fontSize: 13, color: '#484f58' }}>10 agents working — usually takes 30-45 seconds</div>
           </div>
         </div>
       )}
@@ -85,13 +93,13 @@ function Analyze() {
 
       {result && (
         <>
-          {/* Price Chart */}
+          {/* Price Chart with Forecast */}
           <div className="card">
-            <div className="card-title">Price History</div>
-            <PriceChart symbol={analyzedSymbol} />
+            <div className="card-title">Price History & Forecast</div>
+            <PriceChart symbol={analyzedSymbol} forecasts={forecasts} />
           </div>
 
-          {/* Decision hero card */}
+          {/* Decision card */}
           <div className="card" style={{ textAlign: 'center', padding: '32px 24px' }}>
             <div style={{ fontSize: 13, color: '#8b949e', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
               {result.symbol}
@@ -127,15 +135,12 @@ function Analyze() {
           )}
 
           <div className="grid-2">
-            {/* Score bars */}
             <div className="card">
               <div className="card-title">Agent Scores</div>
               {Object.entries(result.scores).map(([name, score]) => (
                 <ScoreBar key={name} name={name} score={score} />
               ))}
             </div>
-
-            {/* Radar chart */}
             <div className="card">
               <div className="card-title">Score Radar</div>
               <ResponsiveContainer width="100%" height={280}>
@@ -154,7 +159,7 @@ function Analyze() {
 
           {result.errors?.length > 0 && (
             <div style={{ background: '#21262d', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#8b949e' }}>
-              Note: {result.errors.map(e => e.replace('Agent','')).join(', ')} data was unavailable — decision based on remaining agents.
+              Note: {result.errors.map(e => e.replace('Agent','')).join(', ')} data was unavailable.
             </div>
           )}
         </>
