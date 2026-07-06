@@ -11,8 +11,10 @@ from agents.sentiment_agent import SocialSentimentAgent
 from agents.macro_agent import MacroeconomicIntelligenceAgent
 from agents.risk_agent import PortfolioRiskAgent
 from agents.fundamental_agent import FundamentalAnalysisAgent
+from agents.forecasting_agent import ForecastingAgent
 from agents.regime_agent import RegimeDetectionAgent
 from agents.anomaly_agent import AnomalyDetectionAgent
+
 
 
 class AnalysisReport:
@@ -81,6 +83,7 @@ class MasterOrchestrator:
         self.macro_agent     = MacroeconomicIntelligenceAgent()
         self.risk_agent = PortfolioRiskAgent()
         self.fundamental_agent = FundamentalAnalysisAgent()
+        self.forecasting_agent = ForecastingAgent()
         self.regime_agent = RegimeDetectionAgent()
         self.anomaly_agent = AnomalyDetectionAgent()
 
@@ -89,7 +92,7 @@ class MasterOrchestrator:
         self._macro_cache: Optional[AgentResult] = None
         self._macro_cache_time: Optional[datetime] = None
 
-        self.logger.info("MasterOrchestrator initialized with 9 agents")
+        self.logger.info("MasterOrchestrator initialized with 10 agents")
 
     def analyze(self, symbol: str) -> AnalysisReport:
         self.logger.info(f"Starting full analysis for {symbol}")
@@ -128,6 +131,9 @@ class MasterOrchestrator:
 
         fundamental_result = self._run_fundamental_analysis(symbol)
         report.add_result("FundamentalAnalysisAgent", fundamental_result)
+
+        forecast_result = self._run_forecasting(symbol, price_history)
+        report.add_result("ForecastingAgent", forecast_result)
 
         regime_result = self._run_regime_detection(symbol,price_history)
         report.add_result("RegimeDetectionAgent", regime_result)
@@ -202,6 +208,10 @@ class MasterOrchestrator:
     def _run_fundamental_analysis(self, symbol: str) -> AgentResult:
         self.logger.info(f"Stage 2e: Running FundamentalAnalysisAgent for {symbol}")
         return self.fundamental_agent.run(symbol)
+
+    def _run_forecasting(self, symbol: str, price_history: list) -> AgentResult:
+        self.logger.info(f"Stage 2h: Running ForecastingAgent for {symbol}")
+        return self.forecasting_agent.run(symbol, price_history=price_history)
     
     def _run_regime_detection(self, symbol: str, price_history: list) -> AgentResult:
         self.logger.info(f"Stage 2f: Running RegimeDetectionAgent for {symbol}")
@@ -222,10 +232,11 @@ class MasterOrchestrator:
     "NewsIntelligenceAgent"           : 0.10,
     "SocialSentimentAgent"            : 0.10,
     "MacroeconomicIntelligenceAgent"  : 0.15,
-    "PortfolioRiskAgent"              : 0.15,
+    "PortfolioRiskAgent"              : 0.10,
     "FundamentalAnalysisAgent"        : 0.10,
     "RegimeDetectionAgent"            : 0.10,
-    "AnomalyDetectionAgent"           : 0.10,
+    "AnomalyDetectionAgent"           : 0.05,
+    "ForecastingAgent"                : 0.10,
 }
         if not report.scores:
             report.final_decision = "HOLD"

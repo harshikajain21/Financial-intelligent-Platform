@@ -1,3 +1,6 @@
+# create_forecasting_agent.py
+
+content = """
 # agents/forecasting_agent.py
 
 import pandas as pd
@@ -7,7 +10,7 @@ from agents.base_agent import BaseAgent, AgentResult, AgentError
 
 
 class ForecastingAgent(BaseAgent):
-    """
+    \"\"\"
     Agent 6: Forecasting Agent
 
     Predicts future stock prices using ensemble of 3 models:
@@ -19,7 +22,7 @@ class ForecastingAgent(BaseAgent):
         +100 = strong predicted uptrend
            0 = flat / uncertain prediction
         -100 = strong predicted downtrend
-    """
+    \"\"\"
 
     def __init__(self):
         super().__init__(name="ForecastingAgent", max_retries=2)
@@ -85,7 +88,7 @@ class ForecastingAgent(BaseAgent):
         )
 
     def _run_prophet(self, df: pd.DataFrame) -> dict:
-        """Facebook Prophet — best for trend + seasonality detection."""
+        \"\"\"Facebook Prophet — best for trend + seasonality detection.\"\"\"
         try:
             from prophet import Prophet
             import warnings
@@ -127,7 +130,7 @@ class ForecastingAgent(BaseAgent):
             return None
 
     def _run_arima(self, df: pd.DataFrame) -> dict:
-        """ARIMA — classical statistical time series model."""
+        \"\"\"ARIMA — classical statistical time series model.\"\"\"
         try:
             from statsmodels.tsa.arima.model import ARIMA
             import warnings
@@ -157,7 +160,7 @@ class ForecastingAgent(BaseAgent):
             return None
 
     def _run_linear(self, df: pd.DataFrame) -> dict:
-        """Linear regression on recent trend — simple but robust baseline."""
+        \"\"\"Linear regression on recent trend — simple but robust baseline.\"\"\"
         try:
             from sklearn.linear_model import LinearRegression
 
@@ -188,10 +191,10 @@ class ForecastingAgent(BaseAgent):
             return None
 
     def _ensemble(self, forecasts: dict, current_price: float) -> dict:
-        """
+        \"\"\"
         Average predictions from all models.
         Weight: Prophet 50%, ARIMA 30%, Linear 20%
-        """
+        \"\"\"
         weights = {"prophet": 0.5, "arima": 0.3, "linear": 0.2}
         ensemble = {}
 
@@ -225,11 +228,11 @@ class ForecastingAgent(BaseAgent):
         return ensemble
 
     def _calculate_score(self, ensemble: dict, current_price: float) -> float:
-        """
+        \"\"\"
         Score based on 30-day predicted change.
         +10% predicted gain = ~+60 score
         -10% predicted loss = ~-60 score
-        """
+        \"\"\"
         if "30d" not in ensemble:
             return 0.0
 
@@ -248,3 +251,8 @@ class ForecastingAgent(BaseAgent):
         if not (-100 <= result.score <= 100):
             return False
         return True
+"""
+
+with open("agents/forecasting_agent.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("agents/forecasting_agent.py written successfully")
