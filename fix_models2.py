@@ -1,5 +1,6 @@
 # fix_models2.py
 
+from typing import Optional
 content = """
 # api/models.py
 
@@ -32,6 +33,7 @@ class ErrorResponse(BaseModel):
     detail  : str
     symbol  : Optional[str] = None
 """
+explanation : Optional[Dict[str, Any]] = {}
 
 with open("api/models.py", "w", encoding="utf-8") as f:
     f.write(content.strip())

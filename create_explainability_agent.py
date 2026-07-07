@@ -1,3 +1,6 @@
+# create_explainability_agent.py
+
+content = """
 # agents/explainability_agent.py
 
 from agents.base_agent import BaseAgent, AgentResult, AgentError
@@ -5,7 +8,7 @@ from datetime import datetime
 
 
 class ExplainabilityAgent(BaseAgent):
-    """
+    \"\"\"
     Agent 12: Explainability Agent
 
     Generates a detailed human-readable investment report
@@ -16,17 +19,17 @@ class ExplainabilityAgent(BaseAgent):
 
     Output score is always 0 — this agent explains,
     it does not contribute to the BUY/HOLD/SELL decision.
-    """
+    \"\"\"
 
     def __init__(self):
         super().__init__(name="ExplainabilityAgent", max_retries=1)
 
     def execute(self, symbol: str, report_data: dict = None, **kwargs) -> AgentResult:
-        """
+        \"\"\"
         Args:
             symbol      : stock ticker
             report_data : dict containing all agent results from orchestrator
-        """
+        \"\"\"
         if not report_data:
             raise AgentError("report_data is required")
 
@@ -64,7 +67,7 @@ class ExplainabilityAgent(BaseAgent):
         )
 
     def _executive_summary(self, symbol, decision, confidence, scores) -> str:
-        """One paragraph plain English summary of the decision."""
+        \"\"\"One paragraph plain English summary of the decision.\"\"\"
 
         # Count positive vs negative signals
         positive = sum(1 for s in scores.values() if s > 20)
@@ -100,7 +103,7 @@ class ExplainabilityAgent(BaseAgent):
             )
 
     def _signal_analysis(self, scores: dict) -> list:
-        """Detailed breakdown of each agent signal."""
+        \"\"\"Detailed breakdown of each agent signal.\"\"\"
         signal_map = {
             "TechnicalAnalysisAgent": {
                 "name": "Technical Analysis",
@@ -174,7 +177,7 @@ class ExplainabilityAgent(BaseAgent):
         return sorted(signals, key=lambda x: x["score"], reverse=True)
 
     def _agreement_map(self, scores: dict, decision: str) -> dict:
-        """Which agents agree with the decision, which disagree."""
+        \"\"\"Which agents agree with the decision, which disagree.\"\"\"
         filtered = {k: v for k, v in scores.items() if k != "MarketDataAgent"}
 
         agreeing    = []
@@ -207,7 +210,7 @@ class ExplainabilityAgent(BaseAgent):
         }
 
     def _key_risks(self, scores: dict, agent_results: dict) -> list:
-        """Identify the top risks regardless of overall decision."""
+        \"\"\"Identify the top risks regardless of overall decision.\"\"\"
         risks = []
 
         risk_score = scores.get("PortfolioRiskAgent", 0)
@@ -240,7 +243,7 @@ class ExplainabilityAgent(BaseAgent):
         return risks
 
     def _what_would_change(self, scores: dict, decision: str) -> list:
-        """What signals would need to change to flip the decision."""
+        \"\"\"What signals would need to change to flip the decision.\"\"\"
         changes = []
 
         if decision == "BUY":
@@ -264,13 +267,13 @@ class ExplainabilityAgent(BaseAgent):
         return changes
 
     def _data_quality(self, scores: dict, errors: list) -> dict:
-        """Report on data completeness."""
+        \"\"\"Report on data completeness.\"\"\"
         total_agents  = 9
         failed_agents = len(errors)
         success_rate  = round(((total_agents - failed_agents) / total_agents) * 100, 1)
 
-        quality = "EXCELLENT" if success_rate == 100 else \
-                  "GOOD"      if success_rate >= 78  else \
+        quality = "EXCELLENT" if success_rate == 100 else \\
+                  "GOOD"      if success_rate >= 78  else \\
                   "FAIR"      if success_rate >= 56  else "POOR"
 
         return {
@@ -297,3 +300,8 @@ class ExplainabilityAgent(BaseAgent):
         if not result.data.get("report"):
             return False
         return True
+"""
+
+with open("agents/explainability_agent.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("agents/explainability_agent.py written successfully")

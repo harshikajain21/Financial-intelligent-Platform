@@ -12,6 +12,7 @@ from agents.macro_agent import MacroeconomicIntelligenceAgent
 from agents.risk_agent import PortfolioRiskAgent
 from agents.fundamental_agent import FundamentalAnalysisAgent
 from agents.forecasting_agent import ForecastingAgent
+from agents.explainability_agent import ExplainabilityAgent
 from agents.regime_agent import RegimeDetectionAgent
 from agents.anomaly_agent import AnomalyDetectionAgent
 
@@ -41,6 +42,10 @@ class AnalysisReport:
             self.errors.append(agent_name)
 
     def to_dict(self) -> dict:
+        agent_results_dict = {}
+        for name, result in self.agent_results.items():
+            agent_results_dict[name] = result.to_dict()
+            
         return {
             "symbol"         : self.symbol,
             "timestamp"      : self.timestamp,
@@ -49,10 +54,7 @@ class AnalysisReport:
             "scores"         : self.scores,
             "errors"         : self.errors,
             "duration_ms"    : self.duration_ms,
-            "agent_results"  : {
-                name: result.to_dict()
-                for name, result in self.agent_results.items()
-            }
+            "agent_results"  : agent_results_dict
         }
 
 
@@ -84,6 +86,7 @@ class MasterOrchestrator:
         self.risk_agent = PortfolioRiskAgent()
         self.fundamental_agent = FundamentalAnalysisAgent()
         self.forecasting_agent = ForecastingAgent()
+        self.explainability_agent = ExplainabilityAgent()
         self.regime_agent = RegimeDetectionAgent()
         self.anomaly_agent = AnomalyDetectionAgent()
 
@@ -92,7 +95,7 @@ class MasterOrchestrator:
         self._macro_cache: Optional[AgentResult] = None
         self._macro_cache_time: Optional[datetime] = None
 
-        self.logger.info("MasterOrchestrator initialized with 10 agents")
+        self.logger.info("MasterOrchestrator initialized with 11 agents")
 
     def analyze(self, symbol: str) -> AnalysisReport:
         self.logger.info(f"Starting full analysis for {symbol}")
@@ -146,18 +149,27 @@ class MasterOrchestrator:
         # ── Stage 3: Decision Fusion ──────────────────────────────
         self._make_decision(report)
 
+        # Run explainability after decision is made
+        explanation = self._run_explainability(symbol, report)
+        report.explanation = explanation
+
         # ── Finalize ──────────────────────────────────────────────
         end_time = datetime.utcnow()
         report.duration_ms = round(
             (end_time - start_time).total_seconds() * 1000, 2
         )
 
+        
+        
         self.logger.info(
             f"{symbol} analysis complete | "
             f"Decision: {report.final_decision} | "
             f"Confidence: {report.confidence}% | "
             f"Duration: {report.duration_ms}ms"
         )
+        self.explanation = None
+        '''self.......'''
+        self.last_report = None
 
         return report
 
@@ -212,6 +224,28 @@ class MasterOrchestrator:
     def _run_forecasting(self, symbol: str, price_history: list) -> AgentResult:
         self.logger.info(f"Stage 2h: Running ForecastingAgent for {symbol}")
         return self.forecasting_agent.run(symbol, price_history=price_history)
+
+    def _run_explainability(self, symbol: str, report) -> dict:
+        self.logger.info(f"Stage 3: Running ExplainabilityAgent for {symbol}")
+        agent_results_dict = {}
+        for k, v in report.agent_results.items():
+            agent_results_dict[k] = v.to_dict()
+            
+        try:
+            result = self.explainability_agent.run(
+                symbol,
+                report_data={
+                    "scores"        : report.scores,
+                    "final_decision": report.final_decision,
+                    "confidence"    : report.confidence,
+                    "errors"        : report.errors,
+                    "agent_results" : agent_results_dict
+                }
+            )
+            return result.data.get("report", {})
+        except Exception as e:
+            self.logger.warning(f"Explainability failed: {e}")
+            return {}
     
     def _run_regime_detection(self, symbol: str, price_history: list) -> AgentResult:
         self.logger.info(f"Stage 2f: Running RegimeDetectionAgent for {symbol}")
