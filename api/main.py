@@ -10,6 +10,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from api.limiter import limiter
 from utils.logger import get_logger
 from config.settings import settings
+from api.routes.jobs import router as jobs_router
 
 logger = get_logger("FastAPI")
 orchestrator = None
@@ -86,6 +87,7 @@ app.include_router(history_router,  prefix="/api/v1", tags=["History"])
 app.include_router(search_router,   prefix="/api/v1", tags=["Search"])
 app.include_router(prices_router,   prefix="/api/v1", tags=["Prices"])
 app.include_router(auth_router,     prefix="/api/v1", tags=["Auth"])
+app.include_router(jobs_router, prefix="/api/v1", tags=["Jobs"])
 
 
 @app.get("/", tags=["Root"])

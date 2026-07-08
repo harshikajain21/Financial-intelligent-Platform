@@ -1,3 +1,6 @@
+# fix_models3.py
+
+content = """
 # api/models.py
 
 from pydantic import BaseModel
@@ -29,3 +32,8 @@ class ErrorResponse(BaseModel):
     error   : str
     detail  : str
     symbol  : Optional[str] = None
+"""
+
+with open("api/models.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("api/models.py updated")

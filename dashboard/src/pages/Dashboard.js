@@ -24,7 +24,7 @@ function Dashboard() {
   if (loading) return <div className="loading">Loading dashboard...</div>;
   if (error) return <div className="error-msg">{error}</div>;
 
-  const buys  = data?.results?.filter(r => r.final_decision === 'BUY').length || 0;
+  const buys = data?.results?.filter(r => r.final_decision === 'BUY').length || 0;
   const sells = data?.results?.filter(r => r.final_decision === 'SELL').length || 0;
   const holds = data?.results?.filter(r => r.final_decision === 'HOLD').length || 0;
 

@@ -1,5 +1,8 @@
+# add_explanation_ui.py
+
+content = """
 import React, { useState } from 'react';
-import { addToWatchlist, startAsyncAnalysis, getJobStatus } from '../api';
+import { analyzeStock, addToWatchlist } from '../api';
 import SearchBar from '../components/SearchBar';
 import PriceChart from '../components/PriceChart';
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer, Tooltip } from 'recharts';
@@ -23,9 +26,9 @@ function getVerdictColor(verdict) {
 }
 
 function ScoreBar({ name, score }) {
-  const pct = Math.min(Math.abs(score), 100);
+  const pct   = Math.min(Math.abs(score), 100);
   const color = getColor(score);
-  const label = name.replace('Agent', '').replace('Intelligence', '').replace('Analysis', '').trim();
+  const label = name.replace('Agent','').replace('Intelligence','').replace('Analysis','').trim();
   return (
     <div className="score-bar-container">
       <div className="score-bar-label">
@@ -165,12 +168,12 @@ function FullReport({ explanation }) {
 }
 
 function Analyze() {
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [saved, setSaved] = useState(false);
+  const [result,         setResult]         = useState(null);
+  const [loading,        setLoading]        = useState(false);
+  const [error,          setError]          = useState(null);
+  const [saved,          setSaved]          = useState(false);
   const [analyzedSymbol, setAnalyzedSymbol] = useState(null);
-  const [forecasts, setForecasts] = useState(null);
+  const [forecasts,      setForecasts]      = useState(null);
 
   const handleSearch = async (symbol, exchange) => {
     setLoading(true);
@@ -179,52 +182,27 @@ function Analyze() {
     setSaved(false);
     setAnalyzedSymbol(null);
     setForecasts(null);
-
     try {
-      // Start async job
-      const jobRes = await startAsyncAnalysis(symbol, exchange);
-      const jobId = jobRes.data.job_id;
-
-      // Poll for result every 2 seconds
-      const poll = setInterval(async () => {
-        try {
-          const statusRes = await getJobStatus(jobId);
-          const job = statusRes.data;
-
-          if (job.status === 'completed' && job.result) {
-            clearInterval(poll);
-            setLoading(false);
-            const r = job.result;
-            setResult(r);
-            setAnalyzedSymbol(r.symbol);
-            if (r.forecasts && Object.keys(r.forecasts).length > 0) {
-              setForecasts(r.forecasts);
-            }
-          } else if (job.status === 'failed') {
-            clearInterval(poll);
-            setLoading(false);
-            setError(job.error || 'Analysis failed');
-          }
-        } catch {
-          clearInterval(poll);
-          setLoading(false);
-          setError('Failed to get job status');
-        }
-      }, 2000);
-
+      const res = await analyzeStock(symbol, exchange);
+      setResult(res.data);
+      setAnalyzedSymbol(res.data.symbol);
+      if (res.data.forecasts && Object.keys(res.data.forecasts).length > 0) {
+        setForecasts(res.data.forecasts);
+      }
     } catch (err) {
+      setError(err.response?.data?.detail || 'Analysis failed. Check the symbol and try again.');
+    } finally {
       setLoading(false);
-      setError(err.response?.data?.detail || 'Failed to start analysis');
     }
   };
 
   const handleAddWatchlist = async () => {
-    try { await addToWatchlist(result.symbol); setSaved(true); } catch { }
+    try { await addToWatchlist(result.symbol); setSaved(true); } catch {}
   };
 
   const radarData = result ? Object.entries(result.scores).map(([key, val]) => ({
-    subject: key.replace('Agent', '').replace('Intelligence', '').replace('Analysis', '').trim(),
-    score: Math.max(val + 100, 0),
+    subject : key.replace('Agent','').replace('Intelligence','').replace('Analysis','').trim(),
+    score   : Math.max(val + 100, 0),
     fullMark: 200,
   })) : [];
 
@@ -312,7 +290,7 @@ function Analyze() {
 
           {result.errors?.length > 0 && (
             <div style={{ background: '#21262d', borderRadius: 8, padding: '12px 16px', fontSize: 13, color: '#8b949e' }}>
-              Note: {result.errors.map(e => e.replace('Agent', '')).join(', ')} data was unavailable.
+              Note: {result.errors.map(e => e.replace('Agent','')).join(', ')} data was unavailable.
             </div>
           )}
         </>
@@ -322,3 +300,8 @@ function Analyze() {
 }
 
 export default Analyze;
+"""
+
+with open("dashboard/src/pages/Analyze.js", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("Analyze.js updated with Full Report section")
