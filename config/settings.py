@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     DEFAULT_SYMBOLS: list = ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN"]
     DATA_REFRESH_INTERVAL: int = 60          # seconds
 
+    # --- Security ---
+    DEMO_API_KEY: str = "demo-key-12345"
+    ADMIN_API_KEY: str = "admin-key-99999"
+    JWT_SECRET_KEY: str = "finplatform-change-this-in-production-2024"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

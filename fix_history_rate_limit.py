@@ -1,3 +1,6 @@
+# fix_history_rate_limit.py
+
+content = """
 # api/routes/history.py
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -66,3 +69,8 @@ async def remove_from_watchlist(request: Request, symbol: str, db: Session = Dep
     if not removed:
         raise HTTPException(status_code=404, detail=f"{symbol} not in watchlist")
     return {"message": f"{symbol} removed from watchlist"}
+"""
+
+with open("api/routes/history.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("api/routes/history.py updated with rate limiting")

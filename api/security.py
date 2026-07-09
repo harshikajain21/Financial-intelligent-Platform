@@ -11,7 +11,7 @@ from utils.logger import get_logger
 logger = get_logger("Security")
 
 # Secret key — in production this must come from environment variable
-SECRET_KEY  = "finplatform-dev-secret-change-in-production-2024"
+
 ALGORITHM   = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -20,9 +20,13 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 # Simple in-memory API key store for now
 # In production this would be a database
+from config.settings import settings
+
+SECRET_KEY = settings.JWT_SECRET_KEY
+
 VALID_API_KEYS = {
-    "demo-key-12345"  : {"user": "demo",  "role": "read"},
-    "admin-key-99999" : {"user": "admin", "role": "admin"},
+    settings.DEMO_API_KEY  : {"user": "demo",  "role": "read"},
+    settings.ADMIN_API_KEY : {"user": "admin", "role": "admin"},
 }
 
 

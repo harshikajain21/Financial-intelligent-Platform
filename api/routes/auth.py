@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from api.security import verify_api_key, create_access_token, get_current_user
 from utils.logger import get_logger
+from api.limiter import limiter
 
 router = APIRouter()
 logger = get_logger("AuthRouter")
@@ -43,6 +44,10 @@ async def get_token(request: TokenRequest):
         expires_in   = "24 hours"
     )
 
+@router.post("/auth/token", response_model=TokenResponse, summary="Exchange API key for JWT token")
+@limiter.limit("10/minute")
+async def get_token(request: Request, request_body: TokenRequest):
+    
 
 @router.get(
     "/auth/me",
