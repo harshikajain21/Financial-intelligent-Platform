@@ -1,3 +1,6 @@
+# fix_yfinance_docker.py
+
+content = """
 # agents/market_data_agent.py
 
 import yfinance as yf
@@ -5,6 +8,9 @@ import pandas as pd
 import requests
 from agents.base_agent import BaseAgent, AgentResult, AgentError
 
+
+# Fix for Docker environments — Yahoo Finance blocks default user agent
+yf.utils.requests.Session = lambda: requests.Session()
 
 
 class MarketDataAgent(BaseAgent):
@@ -105,3 +111,8 @@ class MarketDataAgent(BaseAgent):
         if result.data.get("bars_fetched", 0) == 0:
             return False
         return True
+"""
+
+with open("agents/market_data_agent.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("agents/market_data_agent.py updated with Docker-compatible session")

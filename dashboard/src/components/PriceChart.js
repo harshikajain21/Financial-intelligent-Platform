@@ -32,7 +32,7 @@ function PriceChart({ symbol, forecasts }) {
     if (!symbol) return;
     setLoading(true);
     setError(null);
-    axios.get('http://localhost:8000/api/v1/prices/' + symbol + '?period=' + period)
+    axios.get('/api/v1/prices/' + symbol + '?period=' + period)
       .then(res => {
         const priceData = res.data.data || [];
         setMeta(res.data);
@@ -43,19 +43,19 @@ function PriceChart({ symbol, forecasts }) {
         if (forecasts) {
           const lastDate = priceData.length > 0 ? priceData[priceData.length - 1].date : null;
           const horizons = [
-            { key: '7d',  label: '+7d',  days: 7  },
+            { key: '7d', label: '+7d', days: 7 },
             { key: '30d', label: '+30d', days: 30 },
             { key: '90d', label: '+90d', days: 90 },
           ];
           horizons.forEach(h => {
             if (forecasts[h.key]) {
               combined.push({
-                date     : h.label,
-                close    : null,
-                forecast : forecasts[h.key].price,
-                lower    : forecasts[h.key].lower,
-                upper    : forecasts[h.key].upper,
-                type     : 'forecast'
+                date: h.label,
+                close: null,
+                forecast: forecasts[h.key].price,
+                lower: forecasts[h.key].lower,
+                upper: forecasts[h.key].upper,
+                type: 'forecast'
               });
             }
           });
@@ -75,11 +75,11 @@ function PriceChart({ symbol, forecasts }) {
   ];
 
   const isPositive = meta?.change_pct >= 0;
-  const lineColor  = isPositive ? '#00d4aa' : '#f85149';
+  const lineColor = isPositive ? '#00d4aa' : '#f85149';
   const tickInterval = Math.floor(data.length / 6);
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: '#8b949e', fontSize: 14 }}>Loading chart...</div>;
-  if (error)   return <div style={{ padding: 20, color: '#f85149', fontSize: 13 }}>{error}</div>;
+  if (error) return <div style={{ padding: 20, color: '#f85149', fontSize: 13 }}>{error}</div>;
 
   return (
     <div>

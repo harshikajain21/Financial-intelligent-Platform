@@ -1,3 +1,6 @@
+# fix_auth.py
+
+content = """
 # api/routes/auth.py
 
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -50,3 +53,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "role"          : current_user.get("role"),
         "authenticated" : True
     }
+"""
+
+with open("api/routes/auth.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("api/routes/auth.py fixed")
