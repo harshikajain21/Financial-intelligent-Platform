@@ -23,22 +23,25 @@ class NewsIntelligenceAgent(BaseAgent):
 
     def __init__(self):
         super().__init__(name="NewsIntelligenceAgent", max_retries=2)
-
-        # Load Finnhub client
         from config.settings import settings
         self.client = finnhub.Client(api_key=settings.FINNHUB_API_KEY)
+        self.finbert = None  # Load lazily on first use
 
-        # Load FinBERT — finance specific sentiment model
-        # First run will download ~500MB model, subsequent runs use cache
-        self.logger.info("Loading FinBERT model (first run may take a minute)...")
-        self.finbert = pipeline(
-            task="sentiment-analysis",
-            model="ProsusAI/finbert",
-            tokenizer="ProsusAI/finbert",
-            max_length=512,
-            truncation=True
+    def _get_finbert(self):
+        """Load FinBERT only when needed — saves memory at startup."""
+        if self.finbert is None:
+            # pyrefly: ignore [missing-import]
+            from transformers import pipeline
+            self.logger.info("Loading FinBERT model...")
+            self.finbert = pipeline(
+                task="sentiment-analysis",
+                model="ProsusAI/finbert",
+                tokenizer="ProsusAI/finbert",
+                max_length=512,
+                truncation=True
         )
-        self.logger.info("FinBERT model loaded successfully")
+            self.logger.info("FinBERT loaded successfully")
+        return self.finbert
 
     def execute(self, symbol: str, days_back: int = 7, **kwargs) -> AgentResult:
         """
@@ -132,7 +135,7 @@ class NewsIntelligenceAgent(BaseAgent):
 
         for article in articles:
             try:
-                result = self.finbert(article["headline"])[0]
+                result = self._get_finbert()(article["headline"])[0]
 
                 # Convert FinBERT label to numeric impact
                 label      = result["label"].lower()    # positive/negative/neutral

@@ -80,8 +80,8 @@ class MasterOrchestrator:
         self.tech_agent      = TechnicalAnalysisAgent()
         self.news_agent      = NewsIntelligenceAgent()
         self.sentiment_agent = SocialSentimentAgent(
-            finbert_pipeline=self.news_agent.finbert
-        )
+            finbert_pipeline=None
+            )
         self.macro_agent     = MacroeconomicIntelligenceAgent()
         self.risk_agent = PortfolioRiskAgent()
         self.fundamental_agent = FundamentalAnalysisAgent()
