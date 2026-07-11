@@ -24,11 +24,11 @@ class SocialSentimentAgent(BaseAgent):
         super().__init__(name="SocialSentimentAgent", max_retries=2)
 
         # Reuse FinBERT from NewsAgent if passed in, otherwise load fresh
-        self._get_finbert() = finbert_pipeline
-        if self._get_finbert() is None:
+        self._finbert = finbert_pipeline
+        if self._get_finbert is None:
             from transformers import pipeline
             self.logger.info("Loading FinBERT for sentiment agent...")
-            self._get_finbert() = pipeline(
+            self._get_finbert = pipeline(
                 task="sentiment-analysis",
                 model="ProsusAI/finbert",
                 tokenizer="ProsusAI/finbert",
