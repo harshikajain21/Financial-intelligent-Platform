@@ -1,3 +1,6 @@
+# fix_sentiment_agent.py
+
+content = """
 # agents/sentiment_agent.py
 
 import requests
@@ -154,3 +157,8 @@ class SocialSentimentAgent(BaseAgent):
         if not (-100 <= result.score <= 100):
             return False
         return True
+"""
+
+with open("agents/sentiment_agent.py", "w", encoding="utf-8") as f:
+    f.write(content.strip())
+    print("agents/sentiment_agent.py rewritten successfully")
