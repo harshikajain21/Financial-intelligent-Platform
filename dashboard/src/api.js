@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: process.env.REACT_APP_API_URL || 'https://financial-ntelligent-platform.onrender.com/api/v1',
   timeout: 60000,
 });
 
