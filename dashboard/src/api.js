@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: 'https://financial-ntelligent-platform.onrender.com/api/v1',
-  timeout: 60000,
+  timeout: 120000,
 });
 
 export const searchStocks = (query) => api.get('/search?query=' + query);
