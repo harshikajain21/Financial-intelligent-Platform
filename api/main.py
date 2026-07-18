@@ -44,7 +44,7 @@ app.add_middleware(SlowAPIMiddleware)
 # CORS — restrict to known origins in production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = ["*"],
+    allow_origins=["*"],
     allow_credentials = True,
     allow_methods     = ["GET", "POST", "DELETE"],
     allow_headers     = ["*"],
