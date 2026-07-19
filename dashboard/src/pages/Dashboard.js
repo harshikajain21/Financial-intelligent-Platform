@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getDashboard } from '../api';
+import axios from 'axios';
 
 function getBadgeClass(d) {
   if (d === 'BUY') return 'badge badge-buy';
@@ -11,13 +12,18 @@ function Dashboard() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
   const fetch = () => {
-    getDashboard()
-      .then(res => setData(res.data))
-      .catch(() => setError('Failed to load dashboard'))
-      .finally(() => setLoading(false));
+    // Wake up backend first
+    axios.get('https://financial-ntelligent-platform.onrender.com/api/v1/health')
+      .then(() => {
+        getDashboard()
+          .then(res => setData(res.data))
+          .catch(() => setError('Failed to load dashboard'))
+          .finally(() => setLoading(false));
+      })
+      .catch(() => setError('Backend is waking up, please wait 30 seconds and refresh'));
   };
+
 
   useEffect(() => { fetch(); }, []);
 
