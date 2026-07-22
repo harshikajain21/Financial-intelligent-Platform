@@ -1,33 +1,38 @@
+# ---- Python 3.11 (slim) base image ----
 FROM python:3.11-slim
 
+# Prevent interactive prompts during apt installs
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build‑time system dependencies (minimal)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        libatlas-base-dev \
+        liblapack-dev \
+        && rm -rf /var/lib/apt/lists/*
+
+# Create and switch to a non‑root user for security
+RUN useradd -m -s /bin/bash appuser
+
+# Working directory
 WORKDIR /app
-
-# Install system dependencies needed for compilation
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    cmake \
-    build-essential \
-    libffi-dev \
-    libssl-dev \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Upgrade pip first
-RUN pip install --upgrade pip
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy the application code
 COPY . .
 
-# Create a non-root user and switch to it
-RUN useradd -m -s /bin/bash appuser
+# Adjust ownership for the non‑root user
 RUN chown -R appuser /app
 USER appuser
 
+# Expose FastAPI port
 EXPOSE 8000
 
+# Run the server with Uvicorn
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

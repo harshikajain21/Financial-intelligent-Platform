@@ -1,0 +1,45 @@
+services:
+  # ---------- FastAPI backend ----------
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: finplatform-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env                     # loads DB credentials, JWT secret, etc.
+    depends_on:
+      - db                       # wait for PostgreSQL before starting
+    volumes:
+      - ./logs:/app/logs         # optional: expose logs for debugging
+    restart: unless-stopped
+
+  # ---------- React frontend ----------
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: finplatform-frontend
+    ports:
+      - "80:80"                  # expose through nginx
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ---------- PostgreSQL database ----------
+  db:
+    image: postgres:15
+    container_name: finplatform-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-finplatform}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data   # persistent storage
+    restart: always
+
+volumes:
+  db_data:

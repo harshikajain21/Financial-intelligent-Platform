@@ -1,9 +1,9 @@
 import axios from 'axios';
-
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api/v1',
+  baseURL: "http://localhost:8000/api/v1",
   timeout: 120000,
 });
+
 
 export const searchStocks = (query) => api.get('/search?query=' + query);
 export const analyzeStock = (symbol, exchange = 'NSE') =>

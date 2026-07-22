@@ -15,6 +15,13 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
 
+  db:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.db
+    container_name: finplatform-db
+    restart: always
+
   frontend:
     build:
       context: .
