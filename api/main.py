@@ -18,23 +18,23 @@ orchestrator = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global orchestrator
     logger.info("Starting up Financial Intelligence Platform API...")
     from database.connection import init_db
     init_db()
     from orchestrator.master_orchestrator import MasterOrchestrator
-    orchestrator = MasterOrchestrator()
+    app.state.orchestrator = MasterOrchestrator()
     logger.info("All agents initialized. API ready.")
     yield
     logger.info("Shutting down API...")
 
-
 app = FastAPI(
-    title       = settings.APP_NAME,
-    version     = settings.VERSION,
-    description = "Multi-agent AI system for real-time stock market intelligence",
-    lifespan    = lifespan,
+    lifespan=lifespan,         # <--- You must pass the lifespan handler here
+    docs_url="/api/v1/docs" if settings.DEBUG else None,   
+    redoc_url="/api/v1/redoc" if settings.DEBUG else None, 
+    openapi_url="/api/v1/openapi.json" if settings.DEBUG else None
 )
+
+
 
 # Rate limiter
 app.state.limiter = limiter
@@ -44,7 +44,7 @@ app.add_middleware(SlowAPIMiddleware)
 # CORS — restrict to known origins in production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials = True,
     allow_methods     = ["GET", "POST", "DELETE"],
     allow_headers     = ["*"],

@@ -1,6 +1,6 @@
 # api/routes/analysis.py
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from api.models import AnalysisResponse, ErrorResponse
 from utils.logger import get_logger
 
@@ -41,7 +41,7 @@ def _generate_recommendation(decision: str, confidence: float, scores: dict) -> 
     summary="Run full analysis pipeline for a stock symbol",
     description="Runs all 9 agents and returns a consolidated investment decision."
 )
-async def analyze_symbol(symbol: str):
+def analyze_symbol(request: Request, symbol: str):
     """
     Full analysis endpoint.
     Runs all agents and returns BUY/HOLD/SELL with confidence.
@@ -57,8 +57,7 @@ async def analyze_symbol(symbol: str):
     logger.info(f"API request: analyze {symbol}")
 
     try:
-        # Import here to avoid circular imports
-        from api.main import orchestrator
+        orchestrator = request.app.state.orchestrator
         report = orchestrator.analyze(symbol)
 
     except Exception as e:
@@ -92,7 +91,7 @@ async def analyze_symbol(symbol: str):
     if hasattr(report, 'explanation') and report.explanation:
         explanation_data = report.explanation
     return AnalysisResponse(
-        symbol         = resolved,
+        symbol         = symbol,
         timestamp      = report.timestamp,
         final_decision = report.final_decision or "UNAVAILABLE",
         confidence     = report.confidence or 0,
@@ -100,7 +99,7 @@ async def analyze_symbol(symbol: str):
         errors         = report.errors,
         duration_ms    = report.duration_ms,
         recommendation = recommendation,
-        explanations   = explanations,
+        explanations   = {},
         forecasts      = forecast_data,
         explanation    = explanation_data
     )

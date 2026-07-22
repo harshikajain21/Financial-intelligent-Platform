@@ -30,7 +30,7 @@ async def start_analysis(
     symbol   = sanitize_symbol(symbol)
     exchange = sanitize_exchange(exchange)
 
-    from api.main import orchestrator
+    orchestrator = request.app.state.orchestrator
     job_id = job_manager.create_job(symbol)
     job_manager.run_job(job_id, orchestrator, exchange)
 

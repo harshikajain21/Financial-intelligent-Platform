@@ -49,9 +49,10 @@ class Settings(BaseSettings):
     DATA_REFRESH_INTERVAL: int = 60          # seconds
 
     # --- Security ---
-    DEMO_API_KEY: str = "demo-key-12345"
-    ADMIN_API_KEY: str = "admin-key-99999"
-    JWT_SECRET_KEY: str = "finplatform-change-this-in-production-2024"
+    DEMO_API_KEY: str
+    ADMIN_API_KEY: str
+    JWT_SECRET_KEY: str
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     class Config:
         env_file = ".env"

@@ -54,6 +54,7 @@ class AnalysisReport:
             "scores"         : self.scores,
             "errors"         : self.errors,
             "duration_ms"    : self.duration_ms,
+            "explanation"    : getattr(self, "explanation", None),
             "agent_results"  : agent_results_dict
         }
 

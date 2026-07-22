@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getDashboard } from '../api';
-import axios from 'axios';
+import api, { getDashboard } from '../api';
 
 function getBadgeClass(d) {
   if (d === 'BUY') return 'badge badge-buy';
@@ -14,7 +13,7 @@ function Dashboard() {
   const [error, setError] = useState(null);
   const fetch = () => {
     // Wake up backend first
-    axios.get('https://financial-ntelligent-platform.onrender.com/api/v1/health')
+    api.get('/health')
       .then(() => {
         getDashboard()
           .then(res => setData(res.data))
