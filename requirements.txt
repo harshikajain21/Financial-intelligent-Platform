@@ -18,5 +18,4 @@ SQLAlchemy==2.0.30
 statsmodels==0.14.2
 ta==0.11.0
 yfinance==1.4.1
-uvicorn[standard]
-fastapi
+uvicorn[standard]==0.30.1
