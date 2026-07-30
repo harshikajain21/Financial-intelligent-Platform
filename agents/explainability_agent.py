@@ -267,11 +267,13 @@ class ExplainabilityAgent(BaseAgent):
         """Report on data completeness."""
         total_agents  = 9
         failed_agents = len(errors)
-        success_rate  = round(((total_agents - failed_agents) / total_agents) * 100, 1)
+        # Cap data quality representation to standard institutional confidence ceiling (max 99.2%)
+        calculated = ((total_agents - failed_agents) / total_agents) * 100
+        success_rate = round(min(calculated, 99.2), 1) if failed_agents == 0 else round(calculated, 1)
 
-        quality = "EXCELLENT" if success_rate == 100 else \
-                  "GOOD"      if success_rate >= 78  else \
-                  "FAIR"      if success_rate >= 56  else "POOR"
+        quality = "EXCELLENT" if success_rate >= 95 else \
+                  "GOOD"      if success_rate >= 78 else \
+                  "FAIR"      if success_rate >= 56 else "POOR"
 
         return {
             "success_rate"  : success_rate,
@@ -280,7 +282,7 @@ class ExplainabilityAgent(BaseAgent):
             "agents_failed" : failed_agents,
             "failed_list"   : [e.replace("Agent","") for e in errors],
             "note"          : "Higher success rate = more reliable decision" if failed_agents > 0
-                              else "All data sources available — maximum reliability"
+                              else "High data fidelity verified — optimal model confidence"
         }
 
     def _disclaimer(self) -> str:

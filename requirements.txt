@@ -3,7 +3,7 @@ finnhub_python==2.4.29
 fredapi==0.5.2
 loguru==0.7.2
 numpy>=1.25,<2
-opencv-python==4.13.0.92
+opencv-python==4.7.0.68
 pandas==3.0.3
 passlib==1.7.4
 prophet==1.1.5
