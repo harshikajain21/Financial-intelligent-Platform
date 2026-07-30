@@ -49,10 +49,11 @@ class Settings(BaseSettings):
     DATA_REFRESH_INTERVAL: int = 60          # seconds
 
     # --- Security ---
-    DEMO_API_KEY: str
-    ADMIN_API_KEY: str
-    JWT_SECRET_KEY: str
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"]
+    DEMO_API_KEY: str = "demo_key_change_in_production"
+    ADMIN_API_KEY: str = "admin_key_change_in_production"
+    JWT_SECRET_KEY: str = "change_this_to_a_secure_random_secret_key"
+    CORS_ORIGINS: list = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173", "https://financial-intelligence-frontend.onrender.com"]
+
 
     class Config:
         env_file = ".env"
