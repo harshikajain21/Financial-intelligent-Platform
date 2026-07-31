@@ -1,11 +1,14 @@
-# main.py
+from fastapi.middleware.cors import CORSMiddleware
+from api.main import app  # adjust import if your FastAPI app is defined elsewhere
 
-"""Entry point for the Financial Intelligence Platform API.
-Run with:
-    uvicorn api.main:app --reload
-or simply:
-    python -m uvicorn api.main:app --reload
-"""
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # or replace "*" with your frontend domain for stricter security
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 if __name__ == "__main__":
     import uvicorn
