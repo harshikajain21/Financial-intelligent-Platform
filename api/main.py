@@ -44,19 +44,23 @@ app.add_middleware(SlowAPIMiddleware)
 # CORS — allow production, preview, and localhost
 origins = [
     "http://localhost:3000",  # local React dev server
-    "https://financial-intelligent-platform-55wy-jurificm9.vercel.app",  # production Vercel domain
+    "https://financial-intelligent-platform-s5wy.vercel.app/",  # production Vercel domain
 ]
 
 # Regex to allow all preview deployments on Vercel
 # e.g. https://financial-intelligent-platform-abc123.vercel.app
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:3000",  # local dev
+        "https://financial-intelligent-platform-55wy-jurificm9.vercel.app",  # production
+    ],
     allow_origin_regex=r"https://financial-intelligent-platform-[a-zA-Z0-9]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Security headers middleware
 @app.middleware("http")
