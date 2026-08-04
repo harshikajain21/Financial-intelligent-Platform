@@ -41,14 +41,20 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-# CORS — restrict to known origins in production
+# CORS — allow your Vercel frontend and localhost for dev
+origins = [
+    "https://financial-intelligent-platform-55wy-jurificm9.vercel.app",  # Vercel production URL
+    "http://localhost:3000"  # local React dev server
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials = True,
-    allow_methods     = ["GET", "POST", "DELETE"],
-    allow_headers     = ["*"],
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
+
 
 
 # Security headers middleware
