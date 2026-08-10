@@ -53,7 +53,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # local dev
-        "https://financial-intelligent-platform-55wy-jurificm9.vercel.app",  # production
+        "https://financial-intelligent-platform-frontend-ac1z.onrender.com",  # production
     ],
     allow_origin_regex=r"https://financial-intelligent-platform-[a-zA-Z0-9]+\.vercel\.app",
     allow_credentials=True,
