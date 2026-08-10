@@ -1,55 +1,54 @@
 # agents/market_data_agent.py
 
-import yfinance as yf
-import pandas as pd
 import requests
+from datetime import datetime, timedelta
 from agents.base_agent import BaseAgent, AgentResult, AgentError
+from config.settings import settings
 
+
+PERIOD_TO_DAYS = {
+    "1mo": 30,
+    "3mo": 90,
+    "6mo": 182,
+    "1y": 365,
+}
 
 
 class MarketDataAgent(BaseAgent):
     def __init__(self):
         super().__init__(name="MarketDataAgent", max_retries=3)
+        self.api_key = settings.FINNHUB_API_KEY
+        self.base_url = "https://finnhub.io/api/v1"
 
     def execute(self, symbol: str, period: str = "6mo", **kwargs) -> AgentResult:
         self.logger.info(f"Fetching market data for {symbol} | period={period}")
 
-        # Create session with browser-like headers
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        })
+        if not self.api_key:
+            raise AgentError("FINNHUB_API_KEY is not configured")
 
-        ticker = yf.Ticker(symbol, session=session)
-        hist = ticker.history(period=period)
-
-        if hist.empty:
+        price_data = self._fetch_candles(symbol, period)
+        if not price_data:
             raise AgentError(f"No price data returned for {symbol}")
 
-        hist = hist.reset_index()
-        hist.columns = [c.lower() for c in hist.columns]
-        price_data = hist[["date", "open", "high", "low", "close", "volume"]].copy()
-        price_data["date"] = price_data["date"].astype(str)
+        profile = self._fetch_company_profile(symbol)
+        quote = self._fetch_quote(symbol)
+        fundamentals = self._extract_fundamentals(profile, quote)
 
-        info = ticker.info
-        fundamentals = self._extract_fundamentals(info)
-
-        latest = price_data.iloc[-1]
+        latest = price_data[-1]
         snapshot = {
-            "symbol" : symbol,
-            "date"   : str(latest["date"]),
-            "open"   : round(float(latest["open"]), 4),
-            "high"   : round(float(latest["high"]), 4),
-            "low"    : round(float(latest["low"]), 4),
-            "close"  : round(float(latest["close"]), 4),
-            "volume" : int(latest["volume"]),
+            "symbol": symbol,
+            "date"  : latest["date"],
+            "open"  : latest["open"],
+            "high"  : latest["high"],
+            "low"   : latest["low"],
+            "close" : latest["close"],
+            "volume": latest["volume"],
         }
 
         output_data = {
             "snapshot"      : snapshot,
             "fundamentals"  : fundamentals,
-            "price_history" : price_data.to_dict(orient="records"),
+            "price_history" : price_data,
             "bars_fetched"  : len(price_data),
         }
 
@@ -68,28 +67,91 @@ class MarketDataAgent(BaseAgent):
             metadata   = {"symbol": symbol, "period": period}
         )
 
-    def _extract_fundamentals(self, info: dict) -> dict:
+    def _fetch_candles(self, symbol: str, period: str) -> list:
+        days = PERIOD_TO_DAYS.get(period, 182)
+        end = datetime.utcnow()
+        start = end - timedelta(days=days)
+
+        resp = requests.get(
+            f"{self.base_url}/stock/candle",
+            params={
+                "symbol": symbol,
+                "resolution": "D",
+                "from": int(start.timestamp()),
+                "to": int(end.timestamp()),
+                "token": self.api_key,
+            },
+            timeout=15,
+        )
+
+        if resp.status_code == 429:
+            raise AgentError("Too Many Requests. Rate limited. Try after a while.")
+        resp.raise_for_status()
+        payload = resp.json()
+
+        if payload.get("s") != "ok":
+            return []
+
+        records = []
+        for t, o, h, l, c, v in zip(
+            payload["t"], payload["o"], payload["h"], payload["l"], payload["c"], payload["v"]
+        ):
+            records.append({
+                "date"  : datetime.utcfromtimestamp(t).strftime("%Y-%m-%d"),
+                "open"  : round(float(o), 4),
+                "high"  : round(float(h), 4),
+                "low"   : round(float(l), 4),
+                "close" : round(float(c), 4),
+                "volume": int(v),
+            })
+        return records
+
+    def _fetch_company_profile(self, symbol: str) -> dict:
+        try:
+            resp = requests.get(
+                f"{self.base_url}/stock/profile2",
+                params={"symbol": symbol, "token": self.api_key},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return resp.json() or {}
+        except Exception:
+            return {}
+
+    def _fetch_quote(self, symbol: str) -> dict:
+        try:
+            resp = requests.get(
+                f"{self.base_url}/quote",
+                params={"symbol": symbol, "token": self.api_key},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return resp.json() or {}
+        except Exception:
+            return {}
+
+    def _extract_fundamentals(self, profile: dict, quote: dict) -> dict:
         return {
-            "market_cap"     : info.get("marketCap"),
-            "pe_ratio"       : info.get("trailingPE"),
-            "forward_pe"     : info.get("forwardPE"),
-            "eps"            : info.get("trailingEps"),
-            "dividend_yield" : info.get("dividendYield"),
-            "beta"           : info.get("beta"),
-            "52w_high"       : info.get("fiftyTwoWeekHigh"),
-            "52w_low"        : info.get("fiftyTwoWeekLow"),
-            "avg_volume"     : info.get("averageVolume"),
-            "sector"         : info.get("sector"),
-            "industry"       : info.get("industry"),
-            "country"        : info.get("country"),
-            "employees"      : info.get("fullTimeEmployees"),
-            "revenue"        : info.get("totalRevenue"),
-            "profit_margin"  : info.get("profitMargins"),
-            "roe"            : info.get("returnOnEquity"),
-            "debt_to_equity" : info.get("debtToEquity"),
-            "current_ratio"  : info.get("currentRatio"),
-            "short_name"     : info.get("shortName"),
-            "exchange"       : info.get("exchange"),
+            "market_cap"     : profile.get("marketCapitalization"),
+            "pe_ratio"       : None,   # not in free tier basic endpoints
+            "forward_pe"     : None,
+            "eps"            : None,
+            "dividend_yield" : None,
+            "beta"           : None,
+            "52w_high"       : quote.get("h"),
+            "52w_low"        : quote.get("l"),
+            "avg_volume"     : None,
+            "sector"         : profile.get("finnhubIndustry"),
+            "industry"       : profile.get("finnhubIndustry"),
+            "country"        : profile.get("country"),
+            "employees"      : None,
+            "revenue"        : None,
+            "profit_margin"  : None,
+            "roe"            : None,
+            "debt_to_equity" : None,
+            "current_ratio"  : None,
+            "short_name"     : profile.get("name"),
+            "exchange"       : profile.get("exchange"),
         }
 
     def _calculate_data_quality_score(self, fundamentals: dict) -> float:
