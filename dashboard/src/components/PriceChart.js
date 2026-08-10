@@ -3,7 +3,7 @@ import {
   ComposedChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, CartesianGrid, ReferenceLine, Area
 } from 'recharts';
-import axios from 'axios';
+import api from '../api';
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -32,7 +32,7 @@ function PriceChart({ symbol, forecasts }) {
     if (!symbol) return;
     setLoading(true);
     setError(null);
-    axios.get('/api/v1/prices/' + symbol + '?period=' + period)
+    api.get('/prices/' + symbol + '?period=' + period)
       .then(res => {
         const priceData = res.data.data || [];
         setMeta(res.data);

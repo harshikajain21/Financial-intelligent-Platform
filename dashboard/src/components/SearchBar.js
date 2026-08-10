@@ -3,6 +3,7 @@ import { searchStocks } from '../api';
 
 function SearchBar({ onSearch, loading }) {
   const [query, setQuery] = useState('');
+  const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [exchange, setExchange] = useState('NSE');
   const [showDrop, setShowDrop] = useState(false);
@@ -20,6 +21,7 @@ function SearchBar({ onSearch, loading }) {
 
   const handleSelect = (stock) => {
     setQuery(stock.name);
+    setSelectedSymbol(stock.symbol);
     setSuggestions([]);
     setShowDrop(false);
     onSearch(stock.symbol, exchange);
@@ -28,7 +30,15 @@ function SearchBar({ onSearch, loading }) {
   const handleSubmit = () => {
     if (!query.trim()) return;
     setShowDrop(false);
-    onSearch(query.trim(), exchange);
+    const symbolToUse = selectedSymbol && query.trim() ? selectedSymbol : query.trim();
+    onSearch(symbolToUse, exchange);
+    setSelectedSymbol(null);
+  };
+
+  const handleChange = (e) => {
+    setQuery(e.target.value);
+    setSelectedSymbol(null);   // NEW — typing invalidates the previous selection
+    setShowDrop(true);
   };
 
   const marketLabel = (market) => {
@@ -43,7 +53,7 @@ function SearchBar({ onSearch, loading }) {
           className="search-input"
           placeholder="Search by company name or ticker e.g. Apple, Reliance, TSLA..."
           value={query}
-          onChange={e => { setQuery(e.target.value); setShowDrop(true); }}
+          onChange={handleChange}
           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
           onFocus={() => suggestions.length > 0 && setShowDrop(true)}
         />
