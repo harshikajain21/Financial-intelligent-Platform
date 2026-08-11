@@ -6,6 +6,12 @@ from datetime import datetime
 
 Base = declarative_base()
 
+class FundamentalsCache(Base):
+    __tablename__ = "fundamentals_cache"
+
+    symbol     = Column(String(10), primary_key=True)
+    data       = Column(JSON, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
