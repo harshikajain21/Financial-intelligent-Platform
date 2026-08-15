@@ -1,12 +1,9 @@
 # agents/market_data_agent.py
 
 import requests
-import yfinance as yf
 from datetime import datetime, timedelta
 from agents.base_agent import BaseAgent, AgentResult, AgentError
 from config.settings import settings
-from database.connection import SessionLocal
-from database.models import FundamentalsCache
 
 
 PERIOD_TO_DAYS = {
@@ -16,36 +13,33 @@ PERIOD_TO_DAYS = {
     "1y": 365,
 }
 
-FUNDAMENTALS_CACHE_TTL_HOURS = 12
-
-EMPTY_FUNDAMENTALS = {
-    "market_cap": None, "pe_ratio": None, "forward_pe": None, "eps": None,
-    "dividend_yield": None, "beta": None, "52w_high": None, "52w_low": None,
-    "avg_volume": None, "sector": None, "industry": None, "country": None,
-    "employees": None, "revenue": None, "profit_margin": None, "roe": None,
-    "debt_to_equity": None, "current_ratio": None, "short_name": None, "exchange": None,
+# Twelve Data "outputsize" is a row count, not a date range — approximate
+# trading days (roughly 5/7 of calendar days) with a small buffer.
+PERIOD_TO_OUTPUTSIZE = {
+    "1mo": 25,
+    "3mo": 70,
+    "6mo": 140,
+    "1y": 280,
 }
 
 
 class MarketDataAgent(BaseAgent):
     def __init__(self):
         super().__init__(name="MarketDataAgent", max_retries=3)
-        self.api_key = settings.FINNHUB_API_KEY
-        self.base_url = "https://finnhub.io/api/v1"
+        self.api_key = settings.TWELVE_DATA_API_KEY
+        self.base_url = "https://api.twelvedata.com"
 
     def execute(self, symbol: str, period: str = "6mo", **kwargs) -> AgentResult:
         self.logger.info(f"Fetching market data for {symbol} | period={period}")
 
         if not self.api_key:
-            raise AgentError("FINNHUB_API_KEY is not configured")
+            raise AgentError("TWELVE_DATA_API_KEY is not configured")
 
-        # Price candles — Finnhub (reliable, own rate limit)
         price_data = self._fetch_candles(symbol, period)
         if not price_data:
             raise AgentError(f"No price data returned for {symbol}")
 
-        # Fundamentals — yfinance, cached in SQLite, best-effort
-        fundamentals = self._get_fundamentals_cached(symbol)
+        fundamentals = self._fetch_fundamentals(symbol)
 
         latest = price_data[-1]
         snapshot = {
@@ -80,21 +74,19 @@ class MarketDataAgent(BaseAgent):
             metadata   = {"symbol": symbol, "period": period}
         )
 
-    # ---------- Price candles (Finnhub) ----------
+    # ---------- Price candles (Twelve Data) ----------
 
     def _fetch_candles(self, symbol: str, period: str) -> list:
-        days = PERIOD_TO_DAYS.get(period, 182)
-        end = datetime.utcnow()
-        start = end - timedelta(days=days)
+        outputsize = PERIOD_TO_OUTPUTSIZE.get(period, 140)
 
         resp = requests.get(
-            f"{self.base_url}/stock/candle",
+            f"{self.base_url}/time_series",
             params={
                 "symbol": symbol,
-                "resolution": "D",
-                "from": int(start.timestamp()),
-                "to": int(end.timestamp()),
-                "token": self.api_key,
+                "interval": "1day",
+                "outputsize": outputsize,
+                "order": "ASC",          # oldest first, matches your old contract
+                "apikey": self.api_key,
             },
             timeout=15,
         )
@@ -104,97 +96,78 @@ class MarketDataAgent(BaseAgent):
         resp.raise_for_status()
         payload = resp.json()
 
-        if payload.get("s") != "ok":
+        # Twelve Data returns HTTP 200 even on logical errors — check "status"/"code"
+        if payload.get("status") == "error" or payload.get("code"):
+            msg = payload.get("message", "Unknown Twelve Data error")
+            if payload.get("code") == 429:
+                raise AgentError("Too Many Requests. Rate limited. Try after a while.")
+            raise AgentError(f"Twelve Data error for {symbol}: {msg}")
+
+        values = payload.get("values")
+        if not values:
             return []
 
         records = []
-        for t, o, h, l, c, v in zip(
-            payload["t"], payload["o"], payload["h"], payload["l"], payload["c"], payload["v"]
-        ):
-            records.append({
-                "date"  : datetime.utcfromtimestamp(t).strftime("%Y-%m-%d"),
-                "open"  : round(float(o), 4),
-                "high"  : round(float(h), 4),
-                "low"   : round(float(l), 4),
-                "close" : round(float(c), 4),
-                "volume": int(v),
-            })
+        for row in values:
+            try:
+                records.append({
+                    "date"  : row["datetime"][:10],
+                    "open"  : round(float(row["open"]), 4),
+                    "high"  : round(float(row["high"]), 4),
+                    "low"   : round(float(row["low"]), 4),
+                    "close" : round(float(row["close"]), 4),
+                    "volume": int(float(row.get("volume") or 0)),
+                })
+            except (KeyError, ValueError, TypeError):
+                continue
+
+        # Twelve Data honors "order" param, but sort defensively anyway
+        records.sort(key=lambda r: r["date"])
         return records
 
-    # ---------- Fundamentals (yfinance, cached in SQLite, best-effort) ----------
+    # ---------- Fundamentals snapshot (best-effort, Twelve Data) ----------
+    # Deep fundamentals (ROE, D/E, PEG, growth) live in FundamentalAnalysisAgent
+    # via FMP now. This is just a lightweight quote-level snapshot.
 
-    def _get_fundamentals_cached(self, symbol: str) -> dict:
-        db = SessionLocal()
+    def _fetch_fundamentals(self, symbol: str) -> dict:
+        fundamentals = {
+            "market_cap": None, "52w_high": None, "52w_low": None,
+            "avg_volume": None, "exchange": None, "short_name": None,
+            "currency": None,
+        }
         try:
-            row = db.query(FundamentalsCache).filter_by(symbol=symbol).first()
-            if row and row.updated_at > datetime.utcnow() - timedelta(hours=FUNDAMENTALS_CACHE_TTL_HOURS):
-                self.logger.info(f"Fundamentals cache hit for {symbol}")
-                return row.data
+            resp = requests.get(
+                f"{self.base_url}/quote",
+                params={"symbol": symbol, "apikey": self.api_key},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
-            fundamentals = self._fetch_fundamentals_yfinance(symbol)
+            if data.get("status") == "error" or data.get("code"):
+                self.logger.warning(f"Twelve Data quote failed for {symbol}: {data.get('message')}")
+                return fundamentals
 
-            if fundamentals and any(v is not None for v in fundamentals.values()):
-                if row:
-                    row.data = fundamentals
-                    row.updated_at = datetime.utcnow()
-                else:
-                    db.add(FundamentalsCache(
-                        symbol=symbol,
-                        data=fundamentals,
-                        updated_at=datetime.utcnow(),
-                    ))
-                db.commit()
-            elif row:
-                # yfinance failed this time but we have a stale cache — better than nothing
-                self.logger.info(f"Using stale fundamentals cache for {symbol}")
-                return row.data
-
-            return fundamentals
-        except Exception as e:
-            self.logger.warning(f"Fundamentals cache lookup failed for {symbol}: {e}")
-            return self._fetch_fundamentals_yfinance(symbol)
-        finally:
-            db.close()
-
-    def _fetch_fundamentals_yfinance(self, symbol: str) -> dict:
-        try:
-            session = requests.Session()
-            session.headers.update({
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                              "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            fundamentals.update({
+                "market_cap": self._to_float(data.get("market_cap") or data.get("marketCap")),
+                "52w_high"  : self._to_float(data.get("fifty_two_week", {}).get("high") if isinstance(data.get("fifty_two_week"), dict) else None),
+                "52w_low"   : self._to_float(data.get("fifty_two_week", {}).get("low") if isinstance(data.get("fifty_two_week"), dict) else None),
+                "avg_volume": self._to_float(data.get("average_volume")),
+                "exchange"  : data.get("exchange"),
+                "short_name": data.get("name"),
+                "currency"  : data.get("currency"),
             })
-            ticker = yf.Ticker(symbol, session=session)
-            info = ticker.info or {}
-
-            if info.get("regularMarketPrice") is None and info.get("marketCap") is None:
-                self.logger.warning(f"yfinance returned no usable fundamentals for {symbol}")
-                return dict(EMPTY_FUNDAMENTALS)
-
-            return {
-                "market_cap"     : info.get("marketCap"),
-                "pe_ratio"       : info.get("trailingPE"),
-                "forward_pe"     : info.get("forwardPE"),
-                "eps"            : info.get("trailingEps"),
-                "dividend_yield" : info.get("dividendYield"),
-                "beta"           : info.get("beta"),
-                "52w_high"       : info.get("fiftyTwoWeekHigh"),
-                "52w_low"        : info.get("fiftyTwoWeekLow"),
-                "avg_volume"     : info.get("averageVolume"),
-                "sector"         : info.get("sector"),
-                "industry"       : info.get("industry"),
-                "country"        : info.get("country"),
-                "employees"      : info.get("fullTimeEmployees"),
-                "revenue"        : info.get("totalRevenue"),
-                "profit_margin"  : info.get("profitMargins"),
-                "roe"            : info.get("returnOnEquity"),
-                "debt_to_equity" : info.get("debtToEquity"),
-                "current_ratio"  : info.get("currentRatio"),
-                "short_name"     : info.get("shortName"),
-                "exchange"       : info.get("exchange"),
-            }
         except Exception as e:
-            self.logger.warning(f"yfinance fundamentals fetch failed for {symbol}, continuing without them: {e}")
-            return dict(EMPTY_FUNDAMENTALS)
+            self.logger.warning(f"Twelve Data quote fetch failed for {symbol}, continuing without it: {e}")
+
+        return fundamentals
+
+    @staticmethod
+    def _to_float(value):
+        try:
+            return float(value) if value is not None else None
+        except (ValueError, TypeError):
+            return None
 
     def _calculate_data_quality_score(self, fundamentals: dict) -> float:
         total_fields  = len(fundamentals)

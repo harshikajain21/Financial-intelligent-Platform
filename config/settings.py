@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "change_this_to_a_secure_random_secret_key"
     CORS_ORIGINS: list = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173", "https://financial-intelligence-frontend.onrender.com"]
 
+    # --- Finance APIs ---
+    ALPHA_VANTAGE_API_KEY: str = ""
+    FINNHUB_API_KEY: str = ""
+    POLYGON_API_KEY: str = ""
+    TWELVE_DATA_API_KEY: str = ""
+    FMP_API_KEY: str = ""
 
     class Config:
         env_file = ".env"
